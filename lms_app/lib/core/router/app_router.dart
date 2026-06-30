@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/oauth_screen.dart';
+import '../../features/auth/presentation/screens/complete_profile_screen.dart';
+import '../../../features/enseignant/presentation/screens/enseignant_main_screen.dart';
+import '../../features/apprenant/presentation/screens/apprenant_main_screen.dart';
+import '../../features/apprenant/presentation/screens/detail_cours_apprenant_screen.dart';
+import '../../features/apprenant/presentation/screens/contenu_module_screen.dart';
+import '../../features/splash_screen.dart';
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
+
+  return GoRouter(
+    initialLocation: '/',
+    redirect: (context, state) {
+      final isAuthenticated = authState.isAuthenticated;
+      final loc = state.matchedLocation;
+
+      // Le splash gère lui-même la navigation
+      if (loc == '/') return null;
+
+      final isAuthRoute =
+          loc == '/login' ||
+          loc == '/register' ||
+          loc == '/oauth' ||
+          loc == '/complete-profile';
+
+      if (!isAuthenticated && !isAuthRoute) return '/login';
+      if (isAuthenticated &&
+          (loc == '/login' || loc == '/register')) return '/home';
+      return null;
+    },
+    routes: [
+      // ── Splash ──
+      GoRoute(
+        path: '/',
+        builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (_, __) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/oauth',
+        builder: (context, state) => OAuthScreen(
+          queryParams: state.uri.queryParameters,
+        ),
+      ),
+      GoRoute(
+        path: '/complete-profile',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return CompleteProfileScreen(
+            nomUser: extra['nomUser'] ?? '',
+            prenomUser: extra['prenomUser'] ?? '',
+            emailUser: extra['emailUser'] ?? '',
+            photoProfilUser: extra['photoProfilUser'],
+          );
+        },
+      ),
+      GoRoute(
+        path: '/home',
+        builder: (context, state) {
+          final authState = ref.read(authProvider);
+          if (authState.user?.roleUser == 'ENSEIGNANT') {
+            return const EnseignantMainScreen();
+          }
+          // Apprenant
+          return const ApprenantMainScreen();
+        },
+      ),
+      // ── Routes apprenant ──
+      GoRoute(
+        path: '/apprenant',
+        builder: (context, state) => const ApprenantMainScreen(),
+        routes: [
+          GoRoute(
+            path: 'cours/:idCours',
+            builder: (context, state) {
+              final idCours = state.pathParameters['idCours']!;
+              return DetailCoursApprenantScreen(idCours: idCours);
+            },
+            routes: [
+              GoRoute(
+                path: 'module/:idModule',
+                builder: (context, state) {
+                  final idCours = state.pathParameters['idCours']!;
+                  final idModule = state.pathParameters['idModule']!;
+                  return ContenuModuleScreen(
+                    idCours: idCours,
+                    idModule: idModule,
+                  );
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'profil',
+            builder: (context, state) {
+              return const Scaffold(
+                body: Center(child: Text('Profil apprenant — à implémenter')),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'notifications',
+            builder: (context, state) {
+              return const Scaffold(
+                body: Center(child: Text('Notifications — à implémenter')),
+              );
+            },
+          ),
+        ],
+      ),
+    ],
+  );
+});

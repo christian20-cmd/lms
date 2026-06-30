@@ -1,0 +1,40 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class DioClient {
+  static Dio createDio() {
+    final dio = Dio(
+      BaseOptions(baseUrl: 'http://192.168.137.1:3000/api',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ),
+    );
+
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          const storage = FlutterSecureStorage();
+          final token = await storage.read(key: 'token');
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          return handler.next(options);
+        },
+        onError: (error, handler) async {
+          // Token expiré ou invalide (401) → supprimer la session
+          if (error.response?.statusCode == 401) {
+            const storage = FlutterSecureStorage();
+            await storage.deleteAll();
+            // L'app va rediriger vers login automatiquement via le router
+          }
+          return handler.next(error);
+        },
+      ),
+    );
+
+    return dio;
+  }
+}

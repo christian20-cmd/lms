@@ -1,0 +1,215 @@
+import 'package:dio/dio.dart';
+
+class AuthRemoteDatasource {
+  final Dio _dio;
+
+  AuthRemoteDatasource(this._dio);
+
+  // ── LOGIN ──
+
+  Future<Map<String, dynamic>> verifierEmailLogin(String emailUser) async {
+    print('📡 [verifierEmailLogin] Envoi requête POST /auth/verifier-email-login');
+    print('📡 [verifierEmailLogin] Données: emailUser=$emailUser');
+
+    try {
+      final response = await _dio.post(
+        '/auth/verifier-email-login',
+        data: {'emailUser': emailUser},
+      );
+
+      print('✅ [verifierEmailLogin] Réponse reçue - Statut: ${response.statusCode}');
+      print('✅ [verifierEmailLogin] Données: ${response.data}');
+      return response.data;
+    } catch (e) {
+      print('💥 [verifierEmailLogin] Erreur Dio: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> login({
+    required String emailUser,
+    required String passwordUser,
+  }) async {
+    print('📡 [login] Envoi requête POST /auth/login');
+    print('📡 [login] Email: $emailUser');
+
+    try {
+      final response = await _dio.post(
+        '/auth/login',
+        data: {
+          'emailUser': emailUser,
+          'passwordUser': passwordUser,
+        },
+      );
+
+      print('✅ [login] Réponse reçue - Statut: ${response.statusCode}');
+      print('✅ [login] Données: ${response.data}');
+      return response.data;
+    } catch (e) {
+      print('💥 [login] Erreur Dio: $e');
+      rethrow;
+    }
+  }
+
+  // ── REGISTER ──
+
+  Future<Map<String, dynamic>> validerNomPrenom({
+    required String nomUser,
+    required String prenomUser,
+  }) async {
+    final response = await _dio.post(
+      '/auth/valider-nom-prenom',
+      data: {
+        'nomUser': nomUser,
+        'prenomUser': prenomUser,
+      },
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> verifierEmailInscription(String emailUser) async {
+    final response = await _dio.post(
+      '/auth/verifier-email-inscription',
+      data: {'emailUser': emailUser},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> envoyerCode(String emailUser) async {
+    final response = await _dio.post(
+      '/auth/envoyer-code',
+      data: {'emailUser': emailUser},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> verifierCode({
+    required String emailUser,
+    required String code,
+  }) async {
+    final response = await _dio.post(
+      '/auth/verifier-code',
+      data: {
+        'emailUser': emailUser,
+        'code': code,
+      },
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> validerPassword(String passwordUser) async {
+    final response = await _dio.post(
+      '/auth/valider-password',
+      data: {'passwordUser': passwordUser},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> register({
+    required String nomUser,
+    required String prenomUser,
+    required String emailUser,
+    required String passwordUser,
+    required String roleUser,
+    String? numeroTelUser,
+    String? idVille,
+    String? idOperateur,
+    String? bioUser,
+    String? specialiteEnseignant,
+    String? titreProfessionnelEnseignant,
+    String? niveauApprenant,
+    String? idEtablissement,
+    List<Map<String, String>>? reseauxSociaux,
+  }) async {
+    final response = await _dio.post(
+      '/auth/register',
+      data: {
+        'nomUser': nomUser,
+        'prenomUser': prenomUser,
+        'emailUser': emailUser,
+        'passwordUser': passwordUser,
+        'roleUser': roleUser,
+        if (numeroTelUser != null) 'numeroTelUser': numeroTelUser,
+        if (idVille != null) 'idVille': idVille,
+        if (idOperateur != null) 'idOperateur': idOperateur,
+        if (bioUser != null) 'bioUser': bioUser,
+        if (specialiteEnseignant != null) 'specialiteEnseignant': specialiteEnseignant,
+        if (titreProfessionnelEnseignant != null) 'titreProfessionnelEnseignant': titreProfessionnelEnseignant,
+        if (niveauApprenant != null) 'niveauApprenant': niveauApprenant,
+        if (idEtablissement != null) 'idEtablissement': idEtablissement,
+        if (reseauxSociaux != null) 'reseauxSociaux': reseauxSociaux,
+      },
+    );
+    return response.data;
+  }
+
+  // ── RESET PASSWORD ──
+
+  Future<Map<String, dynamic>> demanderResetPassword(String emailUser) async {
+    final response = await _dio.post(
+      '/auth/demander-reset-password',
+      data: {'emailUser': emailUser},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> verifierCodeReset({
+    required String emailUser,
+    required String code,
+  }) async {
+    final response = await _dio.post(
+      '/auth/verifier-code-reset',
+      data: {'emailUser': emailUser, 'code': code},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> reinitialiserPassword({
+    required String emailUser,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await _dio.post(
+      '/auth/reinitialiser-password',
+      data: {
+        'emailUser': emailUser,
+        'code': code,
+        'newPassword': newPassword,
+      },
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> completerProfil({
+    required String roleUser,
+    String? idVille,
+    String? idOperateur,
+    String? numeroTelUser,
+    String? bioUser,
+    String? niveauApprenant,
+    String? idEtablissement,
+    String? specialiteEnseignant,
+    String? titreProfessionnelEnseignant,
+  }) async {
+    final response = await _dio.post(
+      '/auth/completer-profil',
+      data: {
+        'roleUser': roleUser,
+        if (idVille != null) 'idVille': idVille,
+        if (idOperateur != null) 'idOperateur': idOperateur,
+        if (numeroTelUser != null) 'numeroTelUser': numeroTelUser,
+        if (bioUser != null) 'bioUser': bioUser,
+        if (niveauApprenant != null) 'niveauApprenant': niveauApprenant,
+        if (idEtablissement != null) 'idEtablissement': idEtablissement,
+        if (specialiteEnseignant != null) 'specialiteEnseignant': specialiteEnseignant,
+        if (titreProfessionnelEnseignant != null)
+          'titreProfessionnelEnseignant': titreProfessionnelEnseignant,
+      },
+    );
+    return response.data;
+  }
+
+  Future<void> validerToken(String token) async {
+    await _dio.get('/auth/validate-token');
+  }
+}

@@ -1,0 +1,236 @@
+import 'package:dio/dio.dart';
+import 'dart:io';
+
+class CoursRemoteDatasource {
+  final Dio _dio;
+
+  CoursRemoteDatasource(this._dio);
+
+  // ── Mes cours ──
+  Future<List<dynamic>> getMesCours() async {
+    final response = await _dio.get('/cours/mes-cours');
+    return response.data;
+  }
+
+  // ── Catégories ──
+  Future<List<dynamic>> getCategories() async {
+    final response = await _dio.get('/cours/categories');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> creerCategorie(String nomCategorie) async {
+    final response = await _dio.post('/cours/categories',
+        data: {'nomCategorie': nomCategorie});
+    return response.data;
+  }
+
+  // ── Cours CRUD ──
+  Future<Map<String, dynamic>> creerCours({
+    required String titreCours,
+    required String descriptionCours,
+    required String niveauCours,
+    required String idCategorie,
+    required bool estGratuitCours,
+    double? prixCours,
+    List<String>? tagsExistants,
+    List<String>? nouveauxTags,
+    String? imagePath,
+  }) async {
+    final formData = FormData.fromMap({
+      'titreCours': titreCours,
+      'descriptionCours': descriptionCours,
+      'niveauCours': niveauCours,
+      'idCategorie': idCategorie,
+      'estGratuitCours': estGratuitCours.toString(),
+      if (prixCours != null) 'prixCours': prixCours.toString(),
+      if (tagsExistants != null)
+        'tagsExistants': tagsExistants.join(','),
+      if (nouveauxTags != null)
+        'nouveauxTags': nouveauxTags.join(','),
+      if (imagePath != null)
+        'imageCouvertureCours': await MultipartFile.fromFile(imagePath),
+    });
+    final response = await _dio.post('/cours',
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'));
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> modifierCours({
+    required String idCours,
+    String? titreCours,
+    String? descriptionCours,
+    String? niveauCours,
+    String? idCategorie,
+    bool? estGratuitCours,
+    double? prixCours,
+    String? imagePath,
+  }) async {
+    final formData = FormData.fromMap({
+      if (titreCours != null) 'titreCours': titreCours,
+      if (descriptionCours != null) 'descriptionCours': descriptionCours,
+      if (niveauCours != null) 'niveauCours': niveauCours,
+      if (idCategorie != null) 'idCategorie': idCategorie,
+      if (estGratuitCours != null)
+        'estGratuitCours': estGratuitCours.toString(),
+      if (prixCours != null) 'prixCours': prixCours.toString(),
+      if (imagePath != null)
+        'imageCouvertureCours': await MultipartFile.fromFile(imagePath),
+    });
+    final response = await _dio.put('/cours/$idCours',
+        data: formData,
+        options: Options(contentType: 'multipart/form-data'));
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> toggleStatutCours(String idCours) async {
+    final response = await _dio.patch('/cours/$idCours/toggle-statut');
+    return response.data;
+  }
+
+  Future<void> supprimerCours(String idCours) async {
+    await _dio.delete('/cours/$idCours');
+  }
+
+  // ── Modules ──
+  Future<List<dynamic>> getModules(String idCours) async {
+    final response = await _dio.get('/cours/$idCours/modules');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> creerModule({
+    required String idCours,
+    required String titreModule,
+    required String descriptionModule,
+  }) async {
+    final response = await _dio.post('/cours/$idCours/modules', data: {
+      'titreModule': titreModule,
+      'descriptionModule': descriptionModule,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> modifierModule({
+    required String idCours,
+    required String idModule,
+    String? titreModule,
+    String? descriptionModule,
+  }) async {
+    final response =
+        await _dio.put('/cours/$idCours/modules/$idModule', data: {
+      if (titreModule != null) 'titreModule': titreModule,
+      if (descriptionModule != null) 'descriptionModule': descriptionModule,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> toggleStatutModule({
+    required String idCours,
+    required String idModule,
+  }) async {
+    final response = await _dio
+        .patch('/cours/$idCours/modules/$idModule/toggle-statut');
+    return response.data;
+  }
+
+  Future<void> supprimerModule({
+    required String idCours,
+    required String idModule,
+  }) async {
+    await _dio.delete('/cours/$idCours/modules/$idModule');
+  }
+
+  // ── Contenus ──
+  Future<List<dynamic>> getContenus({
+    required String idCours,
+    required String idModule,
+  }) async {
+    final response =
+        await _dio.get('/cours/$idCours/modules/$idModule/contenus');
+    return response.data;
+  }
+
+  Future<void> ajouterContenu({
+    required String idCours,
+    required String idModule,
+    required String titreContenu,
+    required String typeContenu,
+    String? lienExterne,
+    String? texteContenu,
+    String? fichierPath,
+    // Callback pour la progression upload (0.0 → 1.0)
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
+    // ── Construire le FormData ──
+    final fields = <String, dynamic>{
+      'titreContenu': titreContenu,
+      'typeContenu':  typeContenu,
+      if (lienExterne  != null && lienExterne.isNotEmpty)  'lienExterne':  lienExterne,
+      if (texteContenu != null && texteContenu.isNotEmpty) 'texteContenu': texteContenu,
+    };
+  
+    // Ajouter le fichier si présent
+    if (fichierPath != null && fichierPath.isNotEmpty) {
+      final file     = File(fichierPath);
+      final fileName = file.path.split('/').last;
+  
+      fields['fichier'] = await MultipartFile.fromFile(
+        file.path,
+        filename: fileName,
+        // Dio détecte le Content-Type automatiquement via l'extension
+      );
+    }
+  
+    final formData = FormData.fromMap(fields);
+  
+    // ── URL avec query param typeContenu (requis par uploadDynamique middleware) ──
+    final url = '/cours/$idCours/modules/$idModule/contenus?typeContenu=$typeContenu';
+  
+    await _dio.post(
+      url,
+      data: formData,
+      options: Options(
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        // Timeout plus long pour les gros fichiers
+        sendTimeout:    const Duration(minutes: 10),
+        receiveTimeout: const Duration(minutes:  2),
+      ),
+      onSendProgress: onSendProgress,
+    );
+  }
+
+  Future<Map<String, dynamic>> modifierContenu({
+    required String idCours,
+    required String idModule,
+    required String idContenu,
+    String? titreContenu,
+    String? lienExterne,
+    String? texteContenu,
+    String? fichierPath,
+  }) async {
+    final formData = FormData.fromMap({
+      if (titreContenu != null) 'titreContenu': titreContenu,
+      if (lienExterne != null) 'lienExterne': lienExterne,
+      if (texteContenu != null) 'texteContenu': texteContenu,
+      if (fichierPath != null)
+        'fichier': await MultipartFile.fromFile(fichierPath),
+    });
+    final response = await _dio.put(
+      '/cours/$idCours/modules/$idModule/contenus/$idContenu',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return response.data;
+  }
+
+  Future<void> supprimerContenu({
+    required String idCours,
+    required String idModule,
+    required String idContenu,
+  }) async {
+    await _dio
+        .delete('/cours/$idCours/modules/$idModule/contenus/$idContenu');
+  }
+}

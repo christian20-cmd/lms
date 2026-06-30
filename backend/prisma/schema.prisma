@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Pays {
+  idPays     String      @id @default(uuid())
+  nomPays    String
+  codeIso    String      @unique
+  indicatif  String
+  villes     Ville[]
+  operateurs Operateur[]
+  users      User[]
+}
+
+model Ville {
+  idVille        String          @id @default(uuid())
+  nomVille       String
+  idPays         String
+  pays           Pays            @relation(fields: [idPays], references: [idPays])
+  etablissements Etablissement[]
+  users          User[]
+}
+
+model Operateur {
+  idOperateur    String   @id @default(uuid())
+  nomOperateur   String
+  prefixes       String[]
+  longueurNumero Int
+  idPays         String
+  pays           Pays     @relation(fields: [idPays], references: [idPays])
+  users          User[]
+}
+
+model Etablissement {
+  idEtablissement   String      @id @default(uuid())
+  nomEtablissement  String
+  typeEtablissement String
+  idVille           String
+  ville             Ville       @relation(fields: [idVille], references: [idVille])
+  apprenants        Apprenant[]
+}
+
+model User {
+  idUser              String      @id @default(uuid())
+  nomUser             String
+  prenomUser          String
+  emailUser           String      @unique
+  passwordUser        String
+  roleUser            Role
+  photoProfilUser     String?
+  bioUser             String?
+  numeroTelUser       String?
+  dateInscriptionUser DateTime    @default(now())
+  idVille             String?
+  idOperateur         String?
+  ville               Ville?      @relation(fields: [idVille], references: [idVille])
+  operateur           Operateur?  @relation(fields: [idOperateur], references: [idOperateur])
+  enseignant          Enseignant?
+  apprenant           Apprenant?
+  Pays                Pays?       @relation(fields: [paysIdPays], references: [idPays])
+  paysIdPays          String?
+}
+
+enum Role {
+  ENSEIGNANT
+  APPRENANT
+}
+
+model Enseignant {
+  idEnseignant                 String           @id @default(uuid())
+  specialiteEnseignant         String?
+  titreProfessionnelEnseignant String?
+  idUser                       String           @unique
+  user                         User             @relation(fields: [idUser], references: [idUser])
+  reseauxSociaux               ReseauxSociaux[]
+  cours                        Cours[]
+  Notification                 Notification[]
+}
+
+model ReseauxSociaux {
+  idReseauxSociaux String     @id @default(uuid())
+  plateformeRS     String
+  lienRS           String
+  idEnseignant     String
+  enseignant       Enseignant @relation(fields: [idEnseignant], references: [idEnseignant])
+}
+
+model Apprenant {
+  idApprenant     String         @id @default(uuid())
+  niveauApprenant Niveau?
+  idEtablissement String?
+  idUser          String         @unique
+  user            User           @relation(fields: [idUser], references: [idUser])
+  etablissement   Etablissement? @relation(fields: [idEtablissement], references: [idEtablissement])
+  inscriptions    Inscription[]
+  progressions    Progression[]
+  notifications   Notification[]
+}
+
+enum Niveau {
+  DEBUTANT
+  INTERMEDIAIRE
+  AVANCE
+}
+
+model Categorie {
+  idCategorie    String  @id @default(uuid())
+  nomCategorie   String
+  iconeCategorie String?
+  cours          Cours[]
+}
+
+model Tag {
+  idTag  String     @id @default(uuid())
+  nomTag String     @unique
+  cours  CoursTag[]
+}
+
+model Cours {
+  idCours              String         @id @default(uuid())
+  titreCours           String
+  descriptionCours     String
+  prixCours            Float?
+  estGratuitCours      Boolean        @default(true)
+  imageCouvertureCours String?
+  niveauCours          Niveau
+  statutCours          Statut         @default(BROUILLON)
+  dateCreationCours    DateTime       @default(now())
+  idEnseignant         String
+  idCategorie          String
+  enseignant           Enseignant     @relation(fields: [idEnseignant], references: [idEnseignant])
+  categorie            Categorie      @relation(fields: [idCategorie], references: [idCategorie])
+  modules              Module[]
+  tags                 CoursTag[]
+  inscriptions         Inscription[]
+  notifications        Notification[]
+}
+
+enum Statut {
+  PUBLIE
+  BROUILLON
+}
+
+model CoursTag {
+  idCoursTag String @id @default(uuid())
+  idCours    String
+  idTag      String
+  cours      Cours  @relation(fields: [idCours], references: [idCours])
+  tag        Tag    @relation(fields: [idTag], references: [idTag])
+}
+
+model Module {
+  idModule           String        @id @default(uuid())
+  titreModule        String
+  descriptionModule  String
+  ordreModule        Int
+  statutModule       Statut        @default(BROUILLON)
+  dateCreationModule DateTime      @default(now())
+  idCours            String
+  cours              Cours         @relation(fields: [idCours], references: [idCours])
+  contenus           Contenu[]
+  progressions       Progression[]
+}
+
+model Contenu {
+  idContenu           String      @id @default(uuid())
+  titreContenu        String
+  typeContenu         TypeContenu
+  ordreContenu        Int
+  fichierUrl          String?
+  lienExterne         String?
+  texteContenu        String?
+  dateCreationContenu DateTime    @default(now())
+  idModule            String
+  module              Module      @relation(fields: [idModule], references: [idModule])
+}
+
+enum TypeContenu {
+  VIDEO
+  DOCUMENT
+  TEXTE
+  IMAGE
+}
+
+model Inscription {
+  idInscription       String         @id @default(uuid())
+  dateInscription     DateTime       @default(now())
+  statutPaiement      StatutPaiement @default(GRATUIT)
+  dateCompletionCours DateTime?
+  idApprenant         String
+  idCours             String
+  apprenant           Apprenant      @relation(fields: [idApprenant], references: [idApprenant])
+  cours               Cours          @relation(fields: [idCours], references: [idCours])
+}
+
+enum StatutPaiement {
+  GRATUIT
+  PAYANT
+  EN_ATTENTE
+}
+
+model Progression {
+  idProgression  String    @id @default(uuid())
+  estTermine     Boolean   @default(false)
+  dateCompletion DateTime?
+  idApprenant    String
+  idModule       String
+  apprenant      Apprenant @relation(fields: [idApprenant], references: [idApprenant])
+  module         Module    @relation(fields: [idModule], references: [idModule])
+
+  @@unique([idApprenant, idModule])
+}
+
+model Notification {
+  idNotification        String      @id @default(uuid())
+  messageNotification   String
+  estLuNotification     Boolean     @default(false)
+  dateEnvoiNotification DateTime    @default(now())
+  idApprenant           String?
+  idEnseignant          String?
+  idCours               String
+  apprenant             Apprenant?  @relation(fields: [idApprenant], references: [idApprenant])
+  enseignant            Enseignant? @relation(fields: [idEnseignant], references: [idEnseignant])
+  cours                 Cours       @relation(fields: [idCours], references: [idCours])
+}
+
+model CodeVerification {
+  idCode           String   @id @default(uuid())
+  codeVerification String
+  emailUser        String
+  expiresAt        DateTime
+  estUtilise       Boolean  @default(false)
+  dateCreation     DateTime @default(now())
+}

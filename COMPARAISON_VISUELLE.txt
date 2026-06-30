@@ -1,0 +1,375 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                      COMPARAISON AVANT / APRÈS                                ║
+║                  Refactorisation Détail Cours - Vue Unique                    ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                              ❌ AVANT (Ancienne Architecture)                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📱 ÉCRAN 1: CoursDetailScreen
+├─ Titre du cours
+├─ Description
+├─ Statistiques (modules, contenus)
+├─ Liste des modules:
+│  │
+│  ├─ 📚 Module 1 [Cliquer → NAVIGUE VERS ÉCRAN 2]
+│  │   Description courte du module...
+│  │   └─ Bouton "Voir"
+│  │
+│  ├─ 📚 Module 2 [Cliquer → NAVIGUE VERS ÉCRAN 2]
+│  │   Description courte du module...
+│  │   └─ Bouton "Voir"
+│  │
+│  └─ 📚 Module 3 [Cliquer → NAVIGUE VERS ÉCRAN 2]
+│      Description courte du module...
+│      └─ Bouton "Voir"
+│
+└─ FAB "+ Ajouter Module"
+
+									🔄 NAVIGATION
+								  Navigator.push()
+
+📱 ÉCRAN 2: ModuleDetailScreen (Nouveau écran)
+├─ Titre du module (Module 1)
+├─ Liste des contenus:
+│  │
+│  ├─ 📹 Contenu 1 (Vidéo)
+│  │   Lien vidéo: ...
+│  │   └─ Actions: [Lancer] [Éditer] [Supprimer]
+│  │
+│  ├─ 📝 Contenu 2 (Texte)
+│  │   Lorem ipsum dolor sit amet...
+│  │   └─ Actions: [Voir] [Éditer] [Supprimer]
+│  │
+│  └─ 📄 Contenu 3 (Document)
+│      Document PDF
+│      └─ Actions: [Voir] [Éditer] [Supprimer]
+│
+├─ FAB "+ Ajouter Contenu"
+└─ Bouton Retour
+
+									🔄 NAVIGATION
+								  Navigator.pop()
+
+REVENIR À ÉCRAN 1
+
+
+⚠️ PROBLÈMES:
+   • 2 écrans différents pour voir tous les contenus
+   • Navigation lente (transition de page)
+   • Pas de vue d'ensemble complète
+   • Chaque module = nouveau chargement d'écran
+   • UX fragmentée
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                              ✅ APRÈS (Nouvelle Architecture)                ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📱 ÉCRAN UNIQUE: CoursDetailScreen (Vue Complète)
+
+┌─────────────────────────────────────┐
+│ ← Détails du cours                  │
+├─────────────────────────────────────┤
+│                                     │
+│ 📚 TITRE DU COURS                   │
+│ Description du cours qui explique   │
+│ les objectifs et le contenu général │
+│                                     │
+├─────────────────────────────────────┤
+│ Modules: 3      |    Contenus: 8   │  ← Statistiques globales
+├─────────────────────────────────────┤
+│ MODULES                     + Ajouter
+├─────────────────────────────────────┤
+│                                     │
+│ ▼ 📚 Module 1 - Introduction [Pub]  │  ← DÉJÀ OUVERT
+│   Description courte du module...   │     (Cliquable pour fermer)
+│                                     │
+│   Contenus du module:               │
+│   ┌──────────────────────────────┐  │
+│   │ 📹 Intro Vidéo               │⋮ │
+│   │ Lien vidéo                   │  │  ← Contenu affichable
+│   │ [Lancer] [Éditer] [Supprimer]│  │     avec actions
+│   └──────────────────────────────┘  │
+│                                     │
+│   ┌──────────────────────────────┐  │
+│   │ 📝 Notes de cours            │⋮ │
+│   │ Lorem ipsum dolor sit amet... │  │
+│   │ [Voir] [Éditer] [Supprimer]  │  │
+│   └──────────────────────────────┘  │
+│                                     │
+│   ┌──────────────────────────────┐  │
+│   │ 📄 Slides PDF                │⋮ │
+│   │ Document PDF/Office          │  │
+│   │ [Voir] [Éditer] [Supprimer]  │  │
+│   └──────────────────────────────┘  │
+│                                     │
+├─────────────────────────────────────┤
+│ ▶ 📚 Module 2 - Concepts [Brouillon]│  ← FERMÉ (Cliquable pour ouvrir)
+│   Description courte du module...   │     → Affichera contenus du module 2
+│                                     │
+├─────────────────────────────────────┤
+│ ▶ 📚 Module 3 - Avancé [Pub]        │  ← FERMÉ (Cliquable pour ouvrir)
+│   Description courte du module...   │     → Affichera contenus du module 3
+│                                     │
+└─────────────────────────────────────┘
+
+⚠️ CLIQUER SUR ICÔNE ▶ POUR OUVRIR MODULE 2:
+
+┌─────────────────────────────────────┐
+│ ← Détails du cours                  │
+├─────────────────────────────────────┤
+│                                     │
+│ ▼ 📚 Module 1 - Introduction [Pub]  │
+│   ...contenus...                    │ ← Reste ouvert
+│                                     │
+├─────────────────────────────────────┤
+│ ▼ 📚 Module 2 - Concepts [Brou.]    │  ← MAINTENANT OUVERT!
+│   Description courte du module...   │     (Pas de changement de page)
+│                                     │
+│   Contenus du module:               │
+│   ┌──────────────────────────────┐  │
+│   │ 🎯 Quiz de concepts          │⋮ │
+│   │ Document PDF/Office          │  │
+│   │ [Voir] [Éditer] [Supprimer]  │  │
+│   └──────────────────────────────┘  │
+│                                     │
+├─────────────────────────────────────┤
+│ ▶ 📚 Module 3 - Avancé [Pub]        │
+│   Description courte du module...   │
+│                                     │
+└─────────────────────────────────────┘
+
+✅ AVANTAGES:
+   • 1 seule page pour TOUT voir
+   • Pas de navigation/transition
+   • Vue d'ensemble complète
+   • Possibilité d'avoir plusieurs modules ouverts
+   • UX fluide et intuitive
+   • Performance améliorée (contenus chargés on-demand)
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         INTERACTION: Actions sur Contenus                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1️⃣  VOIR UNE VIDÉO
+	┌────────────────────────┐
+	│ 📹 Intro Vidéo      │  │
+	│ Lien vidéo          │  │
+	│ [Lancer]            │  │  ← Cliquer sur Lancer
+	└────────────────────────┘
+				 ↓
+	TODO: Ouvre lecteur vidéo (url_launcher ou video_player)
+
+
+2️⃣  VOIR LE TEXTE
+	┌────────────────────────┐
+	│ 📝 Notes de cours   │  │
+	│ Lorem ipsum dolor...│  │
+	│ [Voir]              │  │  ← Cliquer sur Voir
+	└────────────────────────┘
+				 ↓
+	┌──────────────────────────────┐
+	│ Notes de cours               │
+	├──────────────────────────────┤
+	│ Lorem ipsum dolor sit amet   │
+	│ consectetur adipiscing elit. │
+	│ Sed do eiusmod tempor...     │
+	│ (texte complet scrollable)   │
+	├──────────────────────────────┤
+	│ [Fermer]                     │
+	└──────────────────────────────┘
+
+
+3️⃣  MENU CONTEXTUEL (Éditer / Supprimer)
+	┌────────────────────────┐
+	│ 📝 Notes de cours   │⋮ │  ← Cliquer sur ⋮
+	│ Lorem ipsum...      │  │
+	└────────────────────────┘
+				 ↓
+	┌──────────────────────┐
+	│ ✏️  Modifier         │  ← Ouvre formulaire édition (TODO)
+	│ 🗑️  Supprimer        │  ← Demande confirmation (TODO)
+	└──────────────────────┘
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                              Tableau Comparatif                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┌─────────────────────────────┬──────────────────┬──────────────────┐
+│ Critère                     │ ❌ Avant (2 pages)│ ✅ Après (1 page) │
+├─────────────────────────────┼──────────────────┼──────────────────┤
+│ Nombre d'écrans              │ 2                │ 1                 │
+│ Navigation                   │ Entre 2 écrans   │ Expansion intra   │
+│ Vue d'ensemble               │ ❌ Partielle      │ ✅ Complète       │
+│ Temps pour voir tous modules │ ⏱️  Lent          │ ⚡ Rapide         │
+│ Scroll performance           │ ⚠️  2 contextes   │ ✅ 1 contexte     │
+│ État persistant              │ ❌ Reset au retour│ ✅ Conservé       │
+│ Modules multiples ouverts    │ ❌ Non           │ ✅ Oui            │
+│ Animations                   │ ❌ Page transition│ ✅ Fluides        │
+│ Complexité code              │ ⚠️  Dispersé      │ ✅ Centralisé     │
+│ Maintenance                  │ ⚠️  Plus difficile│ ✅ Plus facile     │
+└─────────────────────────────┴──────────────────┴──────────────────┘
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          State Management (Dart/Flutter)                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+❌ AVANT:
+class _CoursDetailScreenState extends ConsumerState<CoursDetailScreen> {
+  @override
+  Widget build(BuildContext context) {
+	// Pas de state local
+	// Chaque module navigue avec Navigator.push()
+  }
+}
+
+class _ModuleDetailScreenState extends ConsumerState<ModuleDetailScreen> {
+  @override
+  Widget build(BuildContext context) {
+	// État séparé pour chaque module
+  }
+}
+
+
+✅ APRÈS:
+class _CoursDetailScreenState extends ConsumerState<CoursDetailScreen> {
+  // ✨ État local pour expansion
+  late Map<String, bool> _expandedModules;
+
+  @override
+  void initState() {
+	super.initState();
+	_expandedModules = {};  // { "mod1": true, "mod2": false, ... }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+	// Tous les modules rendus avec état centralisé
+	for (module in modules) {
+	  final isExpanded = _expandedModules[module.id] ?? false;
+	  // Render _ModuleExpansionCard avec l'état
+	}
+  }
+}
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                             Code Architecture                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+AVANT (Architecture dispersée):
+
+  cours_detail_screen.dart
+  ├── CoursDetailScreen (Affiche modules seulement)
+  │   └── Tap → Navigator.push()
+  │
+  module_detail_screen.dart  ← Fichier séparé
+  └── ModuleDetailScreen (Affiche contenus seulement)
+
+
+APRÈS (Architecture centralisée):
+
+  cours_detail_screen.dart
+  ├── CoursDetailScreen (Affiche modules + contenus)
+  │   ├── _ModuleExpansionCard (Nouveau widget)
+  │   │   └── Affiche module + contenus de ce module
+  │   │
+  │   ├── _ModuleFormSheet (Inchangé)
+  │   ├── _ContenuFormSheet (Inchangé)
+  │   └── Helpers... (Inchangés)
+  │
+  module_detail_screen.dart  ← Déprécié, conservé pour compatibilité
+  └── ModuleDetailScreen (LEGACY - À migrer progressivement)
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                            Data Flow (Riverpod)                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+CoursDetailScreen
+│
+├─ ref.watch(modulesProvider(idCours))
+│  └─ Charge la liste des modules
+│     │
+│     └─ Render ListView._ModuleExpansionCard
+│
+└─ Chaque _ModuleExpansionCard
+   │
+   └─ ref.watch(contenusProvider((idCours, idModule)))
+	  └─ Charge les contenus du module
+		 │
+		 ├─ [Loading] → CircularProgressIndicator
+		 ├─ [Error] → Message d'erreur
+		 └─ [Data] → Affiche liste des contenus
+			│
+			└─ Chaque contenu avec actions
+			   ├─ Lancer vidéo → _launchVideo()
+			   ├─ Voir texte → _showTextContent()
+			   └─ Menu ⋮ → [Éditer|Supprimer]
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                            Performance Impact                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+MEMORY:
+  Avant: [CoursDetailScreen en mémoire] → [ModuleDetailScreen en mémoire]
+		 = 2 écrans full en mémoire
+
+  Après: [CoursDetailScreen en mémoire] + [Map<String,bool>]
+		 = 1 écran + petit state local
+
+✅ Impact: Moins d'utilisation de mémoire
+
+
+RENDERING:
+  Avant: CoursDetailScreen.build() 
+		 → Tap module 
+		 → Navigator.push() 
+		 → ModuleDetailScreen.build()
+		 (2 build cycles, page transition)
+
+  Après: CoursDetailScreen.build() 
+		 → Tap module 
+		 → setState() 
+		 → CoursDetailScreen.build() (liste complète)
+		 (1 build cycle, pas de transition)
+
+✅ Impact: Rendu plus fluide, pas de freezing
+
+
+API CALLS:
+  Avant: modulesProvider() → CoursDetailScreen
+		 contenusProvider() → ModuleDetailScreen (au push)
+
+  Après: modulesProvider() → CoursDetailScreen
+		 contenusProvider() → chaque _ModuleExpansionCard (au expand)
+
+✅ Impact: Contenus chargés on-demand (optimisé)
+
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                           Migration Checklist                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Steps pour migrer le code utilisant ModuleDetailScreen:
+
+  [ ] 1. Identifier tous les appels à ModuleDetailScreen
+  [ ] 2. Remplacer Navigator.push(..., ModuleDetailScreen(...))
+		 par setState(() { _expandedModules[idModule] = true; })
+  [ ] 3. S'assurer que le module est chargé dans CoursDetailScreen
+  [ ] 4. Tester l'expansion/collapse
+  [ ] 5. Tester les actions sur les contenus
+  [ ] 6. Supprimer les anciennes références à ModuleDetailScreen
+  [ ] 7. Une fois tout migré: Supprimer la classe ModuleDetailScreen
+  [ ] 8. Compiler et tester l'app complète
+
+
+End of comparison document
+═══════════════════════════════════════════════════════════════════════════════

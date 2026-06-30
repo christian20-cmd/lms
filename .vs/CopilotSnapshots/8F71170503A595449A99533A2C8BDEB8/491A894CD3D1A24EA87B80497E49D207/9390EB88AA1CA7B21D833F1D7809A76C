@@ -1,0 +1,545 @@
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:LMS/features/apprenant/providers/apprenant_provider.dart';
+import 'package:LMS/features/auth/presentation/providers/auth_provider.dart';
+
+// ── Design tokens ──
+class _AppColors {
+  static const bg = Color(0xFFF8F8F6);
+  static const card = Colors.white;
+  static const textPrimary = Color(0xFF1A1A1A);
+  static const textSecondary = Color(0xFF8A8A8A);
+  static const textTertiary = Color(0xFFB8B8B8);
+  static const border = Color(0xFFF0F0EE);
+
+  static const statBlue = Color(0xFFE8F1FB);
+  static const statBlueText = Color(0xFF1A5FA8);
+  static const statBlueAccent = Color(0xFF3B8DDD);
+
+  static const statGreen = Color(0xFFE8F5EE);
+  static const statGreenText = Color(0xFF1A6B3C);
+  static const statGreenAccent = Color(0xFF2EA862);
+
+  static const statAmber = Color(0xFFFAF0DC);
+  static const statAmberText = Color(0xFF8A5A0A);
+  static const statAmberAccent = Color(0xFFEA9F25);
+
+  static const statPurple = Color(0xFFEEEDFE);
+  static const statPurpleText = Color(0xFF4A3FB5);
+  static const statPurpleAccent = Color(0xFF7F77DD);
+}
+
+class DashboardApprenantScreen extends ConsumerStatefulWidget {
+  const DashboardApprenantScreen({super.key});
+
+  @override
+  ConsumerState<DashboardApprenantScreen> createState() =>
+	  _DashboardApprenantScreenState();
+}
+
+class _DashboardApprenantScreenState
+	extends ConsumerState<DashboardApprenantScreen>
+	with TickerProviderStateMixin {
+  late AnimationController _entryController;
+  late Animation<double> _entryFade;
+  late Animation<Offset> _entrySlide;
+
+  @override
+  void initState() {
+	super.initState();
+	_entryController = AnimationController(
+	  vsync: this,
+	  duration: const Duration(milliseconds: 550),
+	);
+	_entryFade =
+		CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
+	_entrySlide = Tween<Offset>(
+	  begin: const Offset(0, 0.06),
+	  end: Offset.zero,
+	).animate(
+		CurvedAnimation(parent: _entryController, curve: Curves.easeOut));
+
+	Future.delayed(const Duration(milliseconds: 80), () {
+	  if (mounted) _entryController.forward();
+	});
+  }
+
+  @override
+  void dispose() {
+	_entryController.dispose();
+	super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+	final authState = ref.watch(authProvider);
+	final statsAsync = ref.watch(statistiquesApprenantProvider);
+
+	return Scaffold(
+	  backgroundColor: _AppColors.bg,
+	  body: SafeArea(
+		child: FadeTransition(
+		  opacity: _entryFade,
+		  child: SlideTransition(
+			position: _entrySlide,
+			child: CustomScrollView(
+			  slivers: [
+				// ── Header avec salutation ──
+				SliverAppBar(
+				  backgroundColor: Colors.transparent,
+				  elevation: 0,
+				  pinned: false,
+				  expandedHeight: 100,
+				  flexibleSpace: FlexibleSpaceBar(
+					background: Padding(
+					  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+					  child: Column(
+						mainAxisAlignment: MainAxisAlignment.end,
+						crossAxisAlignment: CrossAxisAlignment.start,
+						children: [
+						  Text(
+							  'Bienvenue, ${authState.user?.prenomUser ?? 'Apprenant'}',
+							  style: GoogleFonts.outfit(
+								fontSize: 24,
+								fontWeight: FontWeight.w600,
+								color: _AppColors.textPrimary,
+							  ),
+							),
+						  const SizedBox(height: 8),
+						  Text(
+							'Continuez votre apprentissage',
+							style: GoogleFonts.outfit(
+							  fontSize: 14,
+							  color: _AppColors.textSecondary,
+							),
+						  ),
+						],
+					  ),
+					),
+				  ),
+				),
+				// ── Statistiques ──
+				SliverToBoxAdapter(
+				  child: statsAsync.when(
+					data: (stats) => _buildStatsSection(stats),
+					loading: () => _buildStatsShimmer(),
+					error: (err, stack) => SizedBox(
+					  height: 180,
+					  child: Center(
+						child: Text('Erreur: $err'),
+					  ),
+					),
+				  ),
+				),
+				// ── Mes cours ──
+				SliverToBoxAdapter(
+				  child: Padding(
+					padding: const EdgeInsets.fromLTRB(20, 32, 20, 12),
+					child: Text(
+					  'Mes cours',
+					  style: GoogleFonts.outfit(
+						fontSize: 18,
+						fontWeight: FontWeight.w600,
+						color: _AppColors.textPrimary,
+					  ),
+					),
+				  ),
+				),
+				SliverToBoxAdapter(
+				  child: _buildMesCours(),
+				),
+				const SliverToBoxAdapter(child: SizedBox(height: 40)),
+			  ],
+			),
+		  ),
+		),
+	  ),
+	);
+  }
+
+  Widget _buildStatsSection(Map<String, dynamic> stats) {
+	final totalCours = stats['totalCours'] ?? 0;
+	final coursTermines = stats['coursTermines'] ?? 0;
+	final progressionMoyenne = stats['progressionMoyenne'] ?? 0;
+	final tempsTotalApprentissage = stats['tempsTotalApprentissage'] ?? '0h';
+
+	return Padding(
+	  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+	  child: Column(
+		children: [
+		  // Première ligne
+		  Row(
+			children: [
+			  Expanded(
+				child: _StatCard(
+				  label: 'Cours inscrits',
+				  value: totalCours.toString(),
+				  bgColor: _AppColors.statBlue,
+				  textColor: _AppColors.statBlueText,
+				  accentColor: _AppColors.statBlueAccent,
+				),
+			  ),
+			  const SizedBox(width: 12),
+			  Expanded(
+				child: _StatCard(
+				  label: 'Terminés',
+				  value: coursTermines.toString(),
+				  bgColor: _AppColors.statGreen,
+				  textColor: _AppColors.statGreenText,
+				  accentColor: _AppColors.statGreenAccent,
+				),
+			  ),
+			],
+		  ),
+		  const SizedBox(height: 12),
+		  // Deuxième ligne
+		  Row(
+			children: [
+			  Expanded(
+				child: _StatCard(
+				  label: 'Progression moy.',
+				  value: '$progressionMoyenne%',
+				  bgColor: _AppColors.statAmber,
+				  textColor: _AppColors.statAmberText,
+				  accentColor: _AppColors.statAmberAccent,
+				),
+			  ),
+			  const SizedBox(width: 12),
+			  Expanded(
+				child: _StatCard(
+				  label: 'Temps apprentissage',
+				  value: tempsTotalApprentissage,
+				  bgColor: _AppColors.statPurple,
+				  textColor: _AppColors.statPurpleText,
+				  accentColor: _AppColors.statPurpleAccent,
+				),
+			  ),
+			],
+		  ),
+		],
+	  ),
+	);
+  }
+
+  Widget _buildStatsShimmer() {
+	return Shimmer.fromColors(
+	  baseColor: Colors.grey[300]!,
+	  highlightColor: Colors.grey[100]!,
+	  child: Padding(
+		padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+		child: Column(
+		  children: [
+			Row(
+			  children: [
+				Expanded(
+				  child: Container(
+					height: 100,
+					decoration: BoxDecoration(
+					  color: Colors.grey,
+					  borderRadius: BorderRadius.circular(12),
+					),
+				  ),
+				),
+				const SizedBox(width: 12),
+				Expanded(
+				  child: Container(
+					height: 100,
+					decoration: BoxDecoration(
+					  color: Colors.grey,
+					  borderRadius: BorderRadius.circular(12),
+					),
+				  ),
+				),
+			  ],
+			),
+		  ],
+		),
+	  ),
+	);
+  }
+
+  Widget _buildMesCours() {
+	final coursAsync = ref.watch(mesCoursApprenantProvider);
+	final recherche = ref.watch(rechercheCoursApprenantProvider);
+
+	return coursAsync.when(
+	  data: (cours) {
+		final filtered = cours
+			.where((c) =>
+				(c['titre'] as String? ?? '')
+					.toLowerCase()
+					.contains(recherche.toLowerCase()) ||
+				(c['description'] as String? ?? '')
+					.toLowerCase()
+					.contains(recherche.toLowerCase()))
+			.toList();
+
+		if (filtered.isEmpty) {
+		  return Padding(
+			padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+			child: Center(
+			  child: Column(
+				mainAxisAlignment: MainAxisAlignment.center,
+				children: [
+				  Icon(
+					Icons.school_outlined,
+					size: 64,
+					color: _AppColors.textTertiary,
+				  ),
+				  const SizedBox(height: 16),
+				  Text(
+					'Aucun cours trouvé',
+					style: GoogleFonts.outfit(
+					  fontSize: 16,
+					  color: _AppColors.textSecondary,
+					),
+				  ),
+				],
+			  ),
+			),
+		  );
+		}
+
+		return Padding(
+		  padding: const EdgeInsets.symmetric(horizontal: 20),
+		  child: GridView.builder(
+			shrinkWrap: true,
+			physics: const NeverScrollableScrollPhysics(),
+			gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+			  crossAxisCount: 2,
+			  crossAxisSpacing: 12,
+			  mainAxisSpacing: 12,
+			  childAspectRatio: 0.85,
+			),
+			itemCount: filtered.length,
+			itemBuilder: (context, index) {
+			  final coursItem = filtered[index];
+			  return _CoursCard(cours: coursItem);
+			},
+		  ),
+		);
+	  },
+	  loading: () => Padding(
+		padding: const EdgeInsets.symmetric(horizontal: 20),
+		child: GridView.builder(
+		  shrinkWrap: true,
+		  physics: const NeverScrollableScrollPhysics(),
+		  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+			crossAxisCount: 2,
+			crossAxisSpacing: 12,
+			mainAxisSpacing: 12,
+			childAspectRatio: 0.85,
+		  ),
+		  itemCount: 4,
+		  itemBuilder: (context, index) => Shimmer.fromColors(
+			baseColor: Colors.grey[300]!,
+			highlightColor: Colors.grey[100]!,
+			child: Container(
+			  decoration: BoxDecoration(
+				color: Colors.grey,
+				borderRadius: BorderRadius.circular(12),
+			  ),
+			),
+		  ),
+		),
+	  ),
+	  error: (err, stack) => Padding(
+		padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+		child: Center(
+		  child: Text('Erreur: $err'),
+		),
+	  ),
+	);
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color bgColor;
+  final Color textColor;
+  final Color accentColor;
+
+  const _StatCard({
+	required this.label,
+	required this.value,
+	required this.bgColor,
+	required this.textColor,
+	required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+	return Container(
+	  padding: const EdgeInsets.all(16),
+	  decoration: BoxDecoration(
+		color: bgColor,
+		borderRadius: BorderRadius.circular(12),
+		border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+	  ),
+	  child: Column(
+		crossAxisAlignment: CrossAxisAlignment.start,
+		children: [
+		  Text(
+			label,
+			style: GoogleFonts.outfit(
+			  fontSize: 12,
+			  color: textColor,
+			  fontWeight: FontWeight.w500,
+			),
+		  ),
+		  const SizedBox(height: 8),
+		  Text(
+			value,
+			style: GoogleFonts.outfit(
+			  fontSize: 24,
+			  fontWeight: FontWeight.w700,
+			  color: textColor,
+			),
+		  ),
+		],
+	  ),
+	);
+  }
+}
+
+class _CoursCard extends ConsumerWidget {
+  final Map<String, dynamic> cours;
+
+  const _CoursCard({required this.cours});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+	final progression = (cours['progression'] as num?)?.toDouble() ?? 0.0;
+	final imageUrl = cours['imageCouverture'] as String?;
+
+	return GestureDetector(
+	  onTap: () {
+		context.go('/apprenant/cours/${cours['id']}');
+	  },
+	  child: Container(
+		decoration: BoxDecoration(
+		  color: _AppColors.card,
+		  borderRadius: BorderRadius.circular(12),
+		  border: Border.all(
+			color: _AppColors.border,
+			width: 1,
+		  ),
+		),
+		child: Stack(
+		  children: [
+			// Image de couverture
+			if (imageUrl != null)
+			  CachedNetworkImage(
+				imageUrl: imageUrl,
+				fit: BoxFit.cover,
+				placeholder: (context, url) => Shimmer.fromColors(
+				  baseColor: Colors.grey[300]!,
+				  highlightColor: Colors.grey[100]!,
+				  child: Container(
+					color: Colors.grey,
+				  ),
+				),
+				errorWidget: (context, url, error) => Container(
+				  color: _AppColors.statBlue,
+				  child: Icon(
+					Icons.school_outlined,
+					color: _AppColors.statBlueAccent,
+					size: 32,
+				  ),
+				),
+			  )
+			else
+			  Container(
+				color: _AppColors.statBlue,
+				child: Icon(
+				  Icons.school_outlined,
+				  color: _AppColors.statBlueAccent,
+				  size: 32,
+				),
+			  ),
+			// Overlay avec infos
+			Positioned(
+			  bottom: 0,
+			  left: 0,
+			  right: 0,
+			  child: Container(
+				padding: const EdgeInsets.all(12),
+				decoration: BoxDecoration(
+				  gradient: LinearGradient(
+					begin: Alignment.topCenter,
+					end: Alignment.bottomCenter,
+					colors: [
+					  Colors.transparent,
+					  Colors.black.withOpacity(0.6),
+					],
+				  ),
+				),
+				child: Column(
+				  crossAxisAlignment: CrossAxisAlignment.start,
+				  children: [
+					Text(
+					  cours['titre'] ?? 'Sans titre',
+					  maxLines: 2,
+					  overflow: TextOverflow.ellipsis,
+					  style: GoogleFonts.outfit(
+						fontSize: 13,
+						fontWeight: FontWeight.w600,
+						color: Colors.white,
+					  ),
+					),
+					const SizedBox(height: 8),
+					// Barre de progression
+					Column(
+					  crossAxisAlignment: CrossAxisAlignment.start,
+					  children: [
+						Row(
+						  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+						  children: [
+							Text(
+							  'Progression',
+							  style: GoogleFonts.outfit(
+								fontSize: 10,
+								color: Colors.white70,
+							  ),
+							),
+							Text(
+							  '${(progression * 100).toInt()}%',
+							  style: GoogleFonts.outfit(
+								fontSize: 10,
+								fontWeight: FontWeight.w600,
+								color: Colors.white,
+							  ),
+							),
+						  ],
+						),
+						const SizedBox(height: 4),
+						ClipRRect(
+						  borderRadius: BorderRadius.circular(2),
+						  child: LinearProgressIndicator(
+							value: progression,
+							minHeight: 4,
+							backgroundColor: Colors.white30,
+							valueColor: AlwaysStoppedAnimation<Color>(
+							  progression >= 1.0
+								  ? _AppColors.statGreenAccent
+								  : _AppColors.statBlueAccent,
+							),
+						  ),
+						),
+					  ],
+					),
+				  ],
+				),
+			  ),
+			),
+		  ],
+		),
+	  ),
+	);
+  }
+}
