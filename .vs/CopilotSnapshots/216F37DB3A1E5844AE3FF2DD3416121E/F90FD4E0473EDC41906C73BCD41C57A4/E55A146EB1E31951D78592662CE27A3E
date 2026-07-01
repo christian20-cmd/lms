@@ -1,0 +1,1924 @@
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:LMS/features/enseignant/presentation/providers/cours_provider.dart';
+import 'package:LMS/features/auth/presentation/providers/auth_provider.dart';
+import 'package:LMS/features/enseignant/presentation/widgets/create_categorie_sheet.dart';
+
+// ── Design tokens (identiques au Dashboard) ──
+class _AppColors {
+  static const bg = Color(0xFFF8F8F6);
+  static const card = Colors.white;
+  static const textPrimary = Color(0xFF1A1A1A);
+  static const textSecondary = Color(0xFF8A8A8A);
+  static const textTertiary = Color(0xFFB8B8B8);
+  static const border = Color(0xFFF0F0EE);
+
+  static const statBlue = Color(0xFFE8F1FB);
+  static const statBlueText = Color(0xFF1A5FA8);
+  static const statBlueAccent = Color(0xFF3B8DDD);
+
+  static const statGreen = Color(0xFFE8F5EE);
+  static const statGreenText = Color(0xFF1A6B3C);
+  static const statGreenAccent = Color(0xFF2EA862);
+
+  static const statAmber = Color(0xFFFAF0DC);
+  static const statAmberText = Color(0xFF8A5A0A);
+  static const statAmberAccent = Color(0xFFEA9F25);
+
+  static const statPurple = Color(0xFFEEEDFE);
+  static const statPurpleText = Color(0xFF4A3FB5);
+  static const statPurpleAccent = Color(0xFF7F77DD);
+
+  static const danger = Color(0xFFE24B4A);
+  static const dangerBg = Color(0xFFFCEBEB);
+}
+
+// ── Providers locaux ──
+
+// Vue grid / list
+final viewModeProvider = StateProvider<String>((ref) => 'grid');
+
+class MesCoursScreen extends ConsumerStatefulWidget {
+  const MesCoursScreen({super.key});
+
+  @override
+  ConsumerState<MesCoursScreen> createState() => _MesCoursScreenState();
+}
+
+class _MesCoursScreenState extends ConsumerState<MesCoursScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _entryController;
+  late Animation<double> _entryFade;
+  late Animation<Offset> _entrySlide;
+
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _entryFade =
+        CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
+    _entrySlide = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(
+        CurvedAnimation(parent: _entryController, curve: Curves.easeOut));
+
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (mounted) _entryController.forward();
+    });
+
+    _searchController.addListener(() {
+      ref.read(rechercheCoursProvider.notifier).state =
+          _searchController.text;
+    });
+  }
+
+  @override
+  void dispose() {
+    _entryController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+
+  // ── Bottom sheet : créer / modifier un cours ──
+    void _openCoursSheet({Map<String, dynamic>? cours}) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _CoursFormSheet(coursExistant: cours),
+      );
+    }
+
+  // ── Bottom sheet : confirmer la suppression ──
+  void _confirmerSuppression(String idCours, String titre) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ConfirmDeleteSheet(
+        titre: titre,
+        onConfirm: () async {
+          Navigator.pop(context);
+          try {
+            await ref
+                .read(coursNotifierProvider.notifier)
+                .supprimerCours(idCours);
+            if (mounted) {
+              _showSnack('Cours supprimé avec succès', isError: false);
+            }
+          } catch (_) {
+            if (mounted) {
+              _showSnack('Erreur lors de la suppression', isError: true);
+            }
+          }
+        },
+      ),
+    );
+  }
+
+  // ── Toggle statut ──
+  Future<void> _toggleStatut(String idCours) async {
+    try {
+      await ref
+          .read(coursNotifierProvider.notifier)
+          .toggleStatutCours(idCours);
+    } catch (_) {
+      if (mounted) {
+        _showSnack('Erreur lors du changement de statut', isError: true);
+      }
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg,
+            style: GoogleFonts.dmSans(fontSize: 13, color: Colors.white)),
+        backgroundColor: isError ? _AppColors.danger : _AppColors.statGreenAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final coursAsync = ref.watch(mesCoursProvider);
+    final coursFiltres = ref.watch(coursFiltresProvider);
+    final filtre = ref.watch(filtreStatutProvider);
+    final viewMode = ref.watch(viewModeProvider);
+    final notifierState = ref.watch(coursNotifierProvider);
+
+    return Scaffold(
+      backgroundColor: _AppColors.bg,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _entryFade,
+          child: SlideTransition(
+            position: _entrySlide,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Mes cours',
+                        style: GoogleFonts.dmSerifDisplay(
+                          fontSize: 26,
+                          color: _AppColors.textPrimary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      // Bouton créer
+                      GestureDetector(
+                        onTap: () => _openCoursSheet(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: _AppColors.textPrimary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.add,
+                                  size: 16, color: Colors.white),
+                              const SizedBox(width: 6),
+                              Text('Créer',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // ── Barre de recherche ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _AppColors.border, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 14),
+                        const Icon(Icons.search,
+                            size: 18, color: _AppColors.textTertiary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _searchController,
+                            style: GoogleFonts.dmSans(
+                                fontSize: 13,
+                                color: _AppColors.textPrimary),
+                            decoration: InputDecoration(
+                              hintText: 'Rechercher un cours…',
+                              hintStyle: GoogleFonts.dmSans(
+                                  fontSize: 13,
+                                  color: _AppColors.textTertiary),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        if (_searchController.text.isNotEmpty)
+                          GestureDetector(
+                            onTap: () {
+                              _searchController.clear();
+                              ref
+                                  .read(rechercheCoursProvider.notifier)
+                                  .state = '';
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.only(right: 12),
+                              child: Icon(Icons.close,
+                                  size: 16, color: _AppColors.textTertiary),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── Filtres statut + toggle vue ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _FilterChip(
+                                label: 'Tous',
+                                isActive: filtre == 'tous',
+                                onTap: () => ref
+                                    .read(filtreStatutProvider.notifier)
+                                    .state = 'tous',
+                                count: coursAsync.maybeWhen(
+                                    data: (l) => l.length, orElse: () => null),
+                              ),
+                              const SizedBox(width: 8),
+                              _FilterChip(
+                                label: 'Publiés',
+                                isActive: filtre == 'PUBLIE',
+                                onTap: () => ref
+                                    .read(filtreStatutProvider.notifier)
+                                    .state = 'PUBLIE',
+                                dotColor: _AppColors.statGreenAccent,
+                                count: coursAsync.maybeWhen(
+                                    data: (l) => l
+                                        .where((c) =>
+                                            c['statutCours'] == 'PUBLIE')
+                                        .length,
+                                    orElse: () => null),
+                              ),
+                              const SizedBox(width: 8),
+                              _FilterChip(
+                                label: 'Brouillons',
+                                isActive: filtre == 'BROUILLON',
+                                onTap: () => ref
+                                    .read(filtreStatutProvider.notifier)
+                                    .state = 'BROUILLON',
+                                dotColor: _AppColors.statAmberAccent,
+                                count: coursAsync.maybeWhen(
+                                    data: (l) => l
+                                        .where((c) =>
+                                            c['statutCours'] == 'BROUILLON')
+                                        .length,
+                                    orElse: () => null),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Toggle vue grid / list
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border:
+                              Border.all(color: _AppColors.border, width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            _ViewToggleBtn(
+                              icon: Icons.grid_view_rounded,
+                              isActive: viewMode == 'grid',
+                              onTap: () => ref
+                                  .read(viewModeProvider.notifier)
+                                  .state = 'grid',
+                            ),
+                            _ViewToggleBtn(
+                              icon: Icons.view_list_rounded,
+                              isActive: viewMode == 'list',
+                              onTap: () => ref
+                                  .read(viewModeProvider.notifier)
+                                  .state = 'list',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
+
+                // ── Corps ──
+                Expanded(
+                  child: coursAsync.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(
+                        color: _AppColors.textPrimary,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    error: (e, _) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: _AppColors.dangerBg,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(Icons.error_outline,
+                                color: _AppColors.danger, size: 26),
+                          ),
+                          const SizedBox(height: 16),
+                          Text('Erreur de chargement',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: _AppColors.textPrimary)),
+                          const SizedBox(height: 4),
+                          Text('Vérifiez votre connexion',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 13,
+                                  color: _AppColors.textSecondary)),
+                          const SizedBox(height: 20),
+                          GestureDetector(
+                            onTap: () => ref.refresh(mesCoursProvider),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _AppColors.textPrimary,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text('Réessayer',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    data: (_) {
+                      if (coursFiltres.isEmpty) {
+                        return _EmptyState(
+                          onCreer: () => _openCoursSheet(),
+                        );
+                      }
+
+                      return RefreshIndicator(
+                        onRefresh: () async {
+                          _entryController.reset();
+                          await ref.refresh(mesCoursProvider.future);
+                          _entryController.forward();
+                        },
+                        color: _AppColors.textPrimary,
+                        backgroundColor: Colors.white,
+                        child: viewMode == 'grid'
+                            ? _GridView(
+                                cours: coursFiltres,
+                                onEdit: (c) => _openCoursSheet(cours: c),
+                                onDelete: (c) => _confirmerSuppression(
+                                    c['idCours'], c['titreCours']),
+                                onToggle: (c) =>
+                                    _toggleStatut(c['idCours']),
+                              )
+                            : _ListView(
+                                cours: coursFiltres,
+                                onEdit: (c) => _openCoursSheet(cours: c),
+                                onDelete: (c) => _confirmerSuppression(
+                                    c['idCours'], c['titreCours']),
+                                onToggle: (c) =>
+                                    _toggleStatut(c['idCours']),
+                              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Vue GRID ──
+// ────────────────────────────────────────────
+class _GridView extends StatelessWidget {
+  final List<dynamic> cours;
+  final void Function(Map<String, dynamic>) onEdit;
+  final void Function(Map<String, dynamic>) onDelete;
+  final void Function(Map<String, dynamic>) onToggle;
+
+  const _GridView({
+    required this.cours,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+      physics: const AlwaysScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.72,
+      ),
+      itemCount: cours.length,
+      itemBuilder: (context, i) {
+        return _AnimatedListItem(
+          delay: i * 55,
+          child: _CoursGridCard(
+            cours: cours[i],
+            onEdit: () => onEdit(cours[i]),
+            onDelete: () => onDelete(cours[i]),
+            onToggle: () => onToggle(cours[i]),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Vue LIST ──
+// ────────────────────────────────────────────
+class _ListView extends StatelessWidget {
+  final List<dynamic> cours;
+  final void Function(Map<String, dynamic>) onEdit;
+  final void Function(Map<String, dynamic>) onDelete;
+  final void Function(Map<String, dynamic>) onToggle;
+
+  const _ListView({
+    required this.cours,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => _AnimatedListItem(
+                delay: i * 50,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _CoursListCard(
+                    cours: cours[i],
+                    onEdit: () => onEdit(cours[i]),
+                    onDelete: () => onDelete(cours[i]),
+                    onToggle: () => onToggle(cours[i]),
+                  ),
+                ),
+              ),
+              childCount: cours.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Carte GRID ──
+// ────────────────────────────────────────────
+class _CoursGridCard extends StatelessWidget {
+  final dynamic cours;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onToggle;
+
+  const _CoursGridCard({
+    required this.cours,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final estPublie = cours['statutCours'] == 'PUBLIE';
+    final nbModules = cours['_count']?['modules'] ?? 0;
+    final nbInscrits = cours['_count']?['inscriptions'] ?? 0;
+    final categorie = cours['categorie']?['nomCategorie'] ?? '';
+    final imageUrl = cours['imageCouvertureCours'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _AppColors.border, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Vignette image ──
+          ClipRRect(
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(18)),
+            child: Stack(
+              children: [
+                Container(
+                  height: 100,
+                  width: double.infinity,
+                  color: _AppColors.bg,
+                  child: imageUrl != null
+                      ? Image.network(
+                          'http://192.168.1.33:3000$imageUrl',
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _PlaceholderImage(titre: cours['titreCours']),
+                        )
+                      : _PlaceholderImage(titre: cours['titreCours']),
+                ),
+                // Badge statut
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: _StatutBadge(estPublie: estPublie),
+                ),
+                // Menu actions
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: _ActionMenu(
+                    onEdit: onEdit,
+                    onDelete: onDelete,
+                    onToggle: onToggle,
+                    estPublie: estPublie,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Infos ──
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (categorie.isNotEmpty)
+                    Text(
+                      categorie.toUpperCase(),
+                      style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: _AppColors.statBlueAccent,
+                          letterSpacing: 0.6),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    cours['titreCours'],
+                    style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _AppColors.textPrimary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      _MiniStat(
+                          icon: Icons.menu_book_outlined,
+                          value: '$nbModules',
+                          label: 'mod.'),
+                      const SizedBox(width: 8),
+                      _MiniStat(
+                          icon: Icons.people_outline,
+                          value: '$nbInscrits',
+                          label: 'app.'),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  _PrixBadge(cours: cours),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Carte LIST ──
+// ────────────────────────────────────────────
+class _CoursListCard extends StatelessWidget {
+  final dynamic cours;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onToggle;
+
+  const _CoursListCard({
+    required this.cours,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final estPublie = cours['statutCours'] == 'PUBLIE';
+    final nbModules = cours['_count']?['modules'] ?? 0;
+    final nbInscrits = cours['_count']?['inscriptions'] ?? 0;
+    final categorie = cours['categorie']?['nomCategorie'] ?? '';
+    final imageUrl = cours['imageCouvertureCours'];
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _AppColors.border, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Vignette ──
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 68,
+              height: 68,
+              child: imageUrl != null
+                  ? Image.network(
+                      'http://192.168.1.33:3000$imageUrl',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          _PlaceholderImage(titre: cours['titreCours']),
+                    )
+                  : _PlaceholderImage(titre: cours['titreCours']),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // ── Texte ──
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (categorie.isNotEmpty)
+                      Expanded(
+                        child: Text(
+                          categorie.toUpperCase(),
+                          style: GoogleFonts.dmSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: _AppColors.statBlueAccent,
+                              letterSpacing: 0.6),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    _StatutBadge(estPublie: estPublie),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  cours['titreCours'],
+                  style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _AppColors.textPrimary),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _MiniStat(
+                        icon: Icons.menu_book_outlined,
+                        value: '$nbModules',
+                        label: 'modules'),
+                    const SizedBox(width: 12),
+                    _MiniStat(
+                        icon: Icons.people_outline,
+                        value: '$nbInscrits',
+                        label: 'apprenants'),
+                    const Spacer(),
+                    _PrixBadge(cours: cours),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ── Menu ──
+          _ActionMenu(
+            onEdit: onEdit,
+            onDelete: onDelete,
+            onToggle: onToggle,
+            estPublie: estPublie,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Composants réutilisables ──
+// ────────────────────────────────────────────
+
+class _StatutBadge extends StatelessWidget {
+  final bool estPublie;
+  const _StatutBadge({required this.estPublie});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: estPublie ? _AppColors.statGreen : _AppColors.statAmber,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: estPublie
+                  ? _AppColors.statGreenAccent
+                  : _AppColors.statAmberAccent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            estPublie ? 'Publié' : 'Brouillon',
+            style: GoogleFonts.dmSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: estPublie
+                  ? _AppColors.statGreenText
+                  : _AppColors.statAmberText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrixBadge extends StatelessWidget {
+  final dynamic cours;
+  const _PrixBadge({required this.cours});
+
+  @override
+  Widget build(BuildContext context) {
+    final estGratuit = cours['estGratuitCours'] == true;
+    final prix = cours['prixCours'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: estGratuit ? _AppColors.statPurple : _AppColors.statBlue,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        estGratuit ? 'Gratuit' : '${prix ?? 0} Ar',
+        style: GoogleFonts.dmSans(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: estGratuit
+              ? _AppColors.statPurpleText
+              : _AppColors.statBlueText,
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  const _MiniStat(
+      {required this.icon, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: _AppColors.textTertiary),
+        const SizedBox(width: 3),
+        Text('$value $label',
+            style: GoogleFonts.dmSans(
+                fontSize: 10, color: _AppColors.textSecondary)),
+      ],
+    );
+  }
+}
+
+class _PlaceholderImage extends StatelessWidget {
+  final String titre;
+  const _PlaceholderImage({required this.titre});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = [
+      _AppColors.statBlue,
+      _AppColors.statGreen,
+      _AppColors.statAmber,
+      _AppColors.statPurple,
+    ];
+    final color = colors[titre.length % colors.length];
+    final initial = titre.isNotEmpty ? titre[0].toUpperCase() : '?';
+
+    return Container(
+      color: color,
+      child: Center(
+        child: Text(
+          initial,
+          style: GoogleFonts.dmSerifDisplay(
+              fontSize: 28,
+              color: _AppColors.textPrimary.withOpacity(0.3)),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionMenu extends StatelessWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onToggle;
+  final bool estPublie;
+
+  const _ActionMenu({
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+    required this.estPublie,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.85),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(Icons.more_horiz,
+            size: 16, color: _AppColors.textPrimary),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 8,
+      shadowColor: Colors.black.withOpacity(0.08),
+      padding: EdgeInsets.zero,
+      onSelected: (value) {
+        if (value == 'edit') onEdit();
+        if (value == 'toggle') onToggle();
+        if (value == 'delete') onDelete();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'edit',
+          child: _PopupItem(
+              icon: Icons.edit_outlined,
+              label: 'Modifier',
+              color: _AppColors.textPrimary),
+        ),
+        PopupMenuItem(
+          value: 'toggle',
+          child: _PopupItem(
+            icon: estPublie
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+            label: estPublie ? 'Dépublier' : 'Publier',
+            color: estPublie
+                ? _AppColors.statAmberText
+                : _AppColors.statGreenText,
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'delete',
+          child: _PopupItem(
+              icon: Icons.delete_outline,
+              label: 'Supprimer',
+              color: _AppColors.danger),
+        ),
+      ],
+    );
+  }
+}
+
+class _PopupItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _PopupItem(
+      {required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 10),
+        Text(label,
+            style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: color)),
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Filter chip ──
+// ────────────────────────────────────────────
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final Color? dotColor;
+  final int? count;
+
+  const _FilterChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.dotColor,
+    this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isActive ? _AppColors.textPrimary : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? _AppColors.textPrimary : _AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dotColor != null && !isActive) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                    color: dotColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isActive ? Colors.white : _AppColors.textSecondary,
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withOpacity(0.2)
+                      : _AppColors.bg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$count',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? Colors.white
+                        : _AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── View toggle button ──
+// ────────────────────────────────────────────
+class _ViewToggleBtn extends StatelessWidget {
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ViewToggleBtn({
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: isActive ? _AppColors.textPrimary : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon,
+            size: 15,
+            color: isActive ? Colors.white : _AppColors.textTertiary),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Empty state ──
+// ────────────────────────────────────────────
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onCreer;
+  const _EmptyState({required this.onCreer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: _AppColors.statBlue,
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: const Icon(Icons.menu_book_outlined,
+                size: 32, color: _AppColors.statBlueAccent),
+          ),
+          const SizedBox(height: 20),
+          Text('Aucun cours trouvé',
+              style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: _AppColors.textPrimary)),
+          const SizedBox(height: 6),
+          Text('Créez votre premier cours pour commencer',
+              style: GoogleFonts.dmSans(
+                  fontSize: 13, color: _AppColors.textSecondary)),
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: onCreer,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+              decoration: BoxDecoration(
+                color: _AppColors.textPrimary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.add, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text('Créer un cours',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Formulaire cours (bottom sheet) ──
+// ────────────────────────────────────────────
+class _CoursFormSheet extends ConsumerStatefulWidget {
+  final Map<String, dynamic>? coursExistant;
+  const _CoursFormSheet({this.coursExistant});
+
+  @override
+  ConsumerState<_CoursFormSheet> createState() => _CoursFormSheetState();
+}
+
+class _CoursFormSheetState extends ConsumerState<_CoursFormSheet> {
+  final _titreCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _prixCtrl = TextEditingController();
+
+  String _niveau = 'DEBUTANT';
+  bool _estGratuit = true;
+  String? _idCategorie;
+  bool _loading = false;
+  String? _erreur;
+
+  final _niveaux = ['DEBUTANT', 'INTERMEDIAIRE', 'AVANCE'];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.coursExistant != null) {
+      final c = widget.coursExistant!;
+      _titreCtrl.text = c['titreCours'] ?? '';
+      _descCtrl.text = c['descriptionCours'] ?? '';
+      _niveau = c['niveauCours'] ?? 'DEBUTANT';
+      _estGratuit = c['estGratuitCours'] ?? true;
+      _idCategorie = c['idCategorie'];
+      if (c['prixCours'] != null) {
+        _prixCtrl.text = c['prixCours'].toString();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titreCtrl.dispose();
+    _descCtrl.dispose();
+    _prixCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isModification => widget.coursExistant != null;
+
+  Future<void> _submit() async {
+    if (_titreCtrl.text.trim().isEmpty) {
+      setState(() => _erreur = 'Le titre est obligatoire');
+      return;
+    }
+    if (_descCtrl.text.trim().isEmpty) {
+      setState(() => _erreur = 'La description est obligatoire');
+      return;
+    }
+    if (_idCategorie == null) {
+      setState(() => _erreur = 'Veuillez choisir une catégorie');
+      return;
+    }
+    if (!_estGratuit && _prixCtrl.text.trim().isEmpty) {
+      setState(() => _erreur = 'Le prix est obligatoire pour un cours payant');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _erreur = null;
+    });
+
+    try {
+      if (_isModification) {
+        await ref.read(coursNotifierProvider.notifier).modifierCours(
+              idCours: widget.coursExistant!['idCours'],
+              titreCours: _titreCtrl.text.trim(),
+              descriptionCours: _descCtrl.text.trim(),
+              niveauCours: _niveau,
+              idCategorie: _idCategorie,
+              estGratuitCours: _estGratuit,
+              prixCours:
+                  _estGratuit ? null : double.tryParse(_prixCtrl.text),
+            );
+      } else {
+        await ref.read(coursNotifierProvider.notifier).creerCours(
+              titreCours: _titreCtrl.text.trim(),
+              descriptionCours: _descCtrl.text.trim(),
+              niveauCours: _niveau,
+              idCategorie: _idCategorie!,
+              estGratuitCours: _estGratuit,
+              prixCours:
+                  _estGratuit ? null : double.tryParse(_prixCtrl.text),
+            );
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(
+          () => _erreur = 'Une erreur est survenue. Veuillez réessayer.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categoriesAsync = ref.watch(categoriesProvider);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12, bottom: 16),
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: _AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+
+            // Titre sheet
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isModification ? 'Modifier le cours' : 'Nouveau cours',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _AppColors.textPrimary),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: _AppColors.bg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.close,
+                        size: 16, color: _AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Erreur
+            if (_erreur != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _AppColors.dangerBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 16, color: _AppColors.danger),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_erreur!,
+                          style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: _AppColors.danger)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // Titre cours
+            _FormLabel('Titre du cours'),
+            _FormField(
+                controller: _titreCtrl,
+                hint: 'Ex: Introduction à Flutter'),
+
+            const SizedBox(height: 14),
+
+            // Description
+            _FormLabel('Description'),
+            _FormField(
+              controller: _descCtrl,
+              hint: 'Décrivez votre cours en quelques phrases…',
+              maxLines: 3,
+            ),
+
+            const SizedBox(height: 14),
+
+            // Catégorie
+            _FormLabel('Catégorie'),
+            categoriesAsync.when(
+              loading: () => Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _AppColors.bg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _AppColors.border),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _AppColors.textTertiary),
+                  ),
+                ),
+              ),
+              error: (_, __) => Text('Erreur catégories',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12, color: _AppColors.danger)),
+              data: (cats) {
+                if (cats.isEmpty) {
+                  // Aucune catégorie — proposer d'en créer une
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('Aucune catégorie disponible',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 13, color: _AppColors.textTertiary)),
+                        ),
+                        GestureDetector(
+                          onTap: () async {
+                            final result = await showModalBottomSheet<Map<String, dynamic>>(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => const CreateCategorieSheet(),
+                            );
+                            if (result != null && mounted) {
+                              setState(() {
+                                _idCategorie = result['categorie']?['idCategorie'] ?? result['idCategorie'] ?? null;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _AppColors.textPrimary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text('Ajouter une catégorie',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    height: 44,
+                  );
+                }
+
+                // Sinon afficher dropdown et aussi option de création
+                final items = cats
+                    .map<DropdownMenuItem<String>>((cat) =>
+                        DropdownMenuItem(
+                          value: cat['idCategorie'],
+                          child: Text(cat['nomCategorie']),
+                        ))
+                    .toList();
+                // Ajouter option pour créer
+                items.add(DropdownMenuItem(
+                  value: '__create__',
+                  child: Text('Ajouter une catégorie...', style: GoogleFonts.dmSans(fontSize: 13)),
+                ));
+
+                return Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: _AppColors.bg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _AppColors.border),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _idCategorie,
+                      hint: Text('Choisir une catégorie',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: _AppColors.textTertiary)),
+                      isExpanded: true,
+                      style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          color: _AppColors.textPrimary),
+                      icon: const Icon(Icons.keyboard_arrow_down,
+                          size: 18, color: _AppColors.textTertiary),
+                      onChanged: (v) async {
+                        if (v == '__create__') {
+                          final result = await showModalBottomSheet<Map<String, dynamic>>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (_) => const _CreateCategorieSheet(),
+                          );
+                          if (result != null && mounted) {
+                            setState(() {
+                              _idCategorie = result['categorie']?['idCategorie'] ?? result['idCategorie'] ?? null;
+                            });
+                          }
+                        } else {
+                          setState(() => _idCategorie = v);
+                        }
+                      },
+                      items: items,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 14),
+
+            // Niveau
+            _FormLabel('Niveau'),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: _AppColors.bg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: _niveaux.map((n) {
+                  final isActive = _niveau == n;
+                  final labels = {
+                    'DEBUTANT': 'Débutant',
+                    'INTERMEDIAIRE': 'Intermédiaire',
+                    'AVANCE': 'Avancé',
+                  };
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _niveau = n),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? Colors.white
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          boxShadow: isActive
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black
+                                        .withOpacity(0.06),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  )
+                                ]
+                              : [],
+                        ),
+                        child: Text(
+                          labels[n]!,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: isActive
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: isActive
+                                ? _AppColors.textPrimary
+                                : _AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Prix
+            _FormLabel('Tarification'),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _estGratuit = true),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _estGratuit
+                            ? _AppColors.statPurple
+                            : _AppColors.bg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _estGratuit
+                              ? _AppColors.statPurpleAccent
+                              : _AppColors.border,
+                        ),
+                      ),
+                      child: Text('Gratuit',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: _estGratuit
+                                ? _AppColors.statPurpleText
+                                : _AppColors.textSecondary,
+                          )),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _estGratuit = false),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: !_estGratuit
+                            ? _AppColors.statBlue
+                            : _AppColors.bg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: !_estGratuit
+                              ? _AppColors.statBlueAccent
+                              : _AppColors.border,
+                        ),
+                      ),
+                      child: Text('Payant',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: !_estGratuit
+                                ? _AppColors.statBlueText
+                                : _AppColors.textSecondary,
+                          )),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            if (!_estGratuit) ...[
+              const SizedBox(height: 12),
+              _FormField(
+                controller: _prixCtrl,
+                hint: 'Prix en Ariary',
+                keyboardType: TextInputType.number,
+                suffix: Text('Ar',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        color: _AppColors.textSecondary)),
+              ),
+            ],
+
+            const SizedBox(height: 24),
+
+            // Bouton submit
+            GestureDetector(
+              onTap: _loading ? null : _submit,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                decoration: BoxDecoration(
+                  color: _loading
+                      ? _AppColors.textPrimary.withOpacity(0.6)
+                      : _AppColors.textPrimary,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: _loading
+                    ? const Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        ),
+                      )
+                    : Text(
+                        _isModification ? 'Enregistrer' : 'Créer le cours',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Helpers formulaire ──
+class _FormLabel extends StatelessWidget {
+  final String text;
+  const _FormLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(text,
+          style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _AppColors.textSecondary)),
+    );
+  }
+}
+
+class _FormField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final int maxLines;
+  final TextInputType? keyboardType;
+  final Widget? suffix;
+
+  const _FormField({
+    required this.controller,
+    required this.hint,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _AppColors.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _AppColors.border),
+      ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        keyboardType: keyboardType,
+        style: GoogleFonts.dmSans(
+            fontSize: 13, color: _AppColors.textPrimary),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.dmSans(
+              fontSize: 13, color: _AppColors.textTertiary),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          suffixIcon: suffix != null
+              ? Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: suffix,
+                )
+              : null,
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 0, minHeight: 0),
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Confirm delete sheet ──
+// ────────────────────────────────────────────
+class _ConfirmDeleteSheet extends StatelessWidget {
+  final String titre;
+  final VoidCallback onConfirm;
+
+  const _ConfirmDeleteSheet({required this.titre, required this.onConfirm});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 20),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: _AppColors.dangerBg,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(Icons.delete_outline,
+                size: 28, color: _AppColors.danger),
+          ),
+          const SizedBox(height: 16),
+          Text('Supprimer le cours ?',
+              style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: _AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          Text(
+            '"$titre" sera supprimé définitivement avec tous ses modules et contenus.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(
+                fontSize: 13, color: _AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _AppColors.bg,
+                      borderRadius: BorderRadius.circular(14),
+                      border:
+                          Border.all(color: _AppColors.border, width: 1),
+                    ),
+                    child: Text('Annuler',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: _AppColors.textPrimary)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onConfirm,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: _AppColors.danger,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text('Supprimer',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// ── Animated list item (identique dashboard) ──
+// ────────────────────────────────────────────
+class _AnimatedListItem extends StatefulWidget {
+  final Widget child;
+  final int delay;
+
+  const _AnimatedListItem({required this.child, required this.delay});
+
+  @override
+  State<_AnimatedListItem> createState() => _AnimatedListItemState();
+}
+
+class _AnimatedListItemState extends State<_AnimatedListItem>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}

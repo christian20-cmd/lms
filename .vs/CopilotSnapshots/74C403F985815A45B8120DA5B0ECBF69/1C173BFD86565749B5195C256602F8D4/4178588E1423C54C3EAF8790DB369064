@@ -1,0 +1,267 @@
+﻿// EXEMPLE D'UTILISATION - CoursDetailScreen Unifié
+
+import 'package:flutter/material.dart';
+import 'package:LMS/features/enseignant/presentation/screens/cours_detail_screen.dart';
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  NAVIGATION VERS L'ÉCRAN DÉTAILS DU COURS (Unifié)            ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+class CoursCardExample extends StatelessWidget {
+  final String idCours;
+  final String titre;
+  final String description;
+
+  const CoursCardExample({
+	required this.idCours,
+	required this.titre,
+	required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+	return GestureDetector(
+	  // ✅ NOUVEAU: Navigation vers CoursDetailScreen
+	  // Tous les modules et contenus sont affichés en une seule page
+	  onTap: () => _navigateToCoursDetail(),
+	  child: Container(
+		padding: const EdgeInsets.all(16),
+		child: Column(
+		  crossAxisAlignment: CrossAxisAlignment.start,
+		  children: [
+			Text(titre),
+			Text(description),
+			ElevatedButton(
+			  onPressed: () => _navigateToCoursDetail(),
+			  child: const Text('Voir le cours'),
+			),
+		  ],
+		),
+	  ),
+	);
+  }
+
+  void _navigateToCoursDetail() {
+	Navigator.push(
+	  // context va venir du BuildContext
+	  context as BuildContext,
+	  MaterialPageRoute(
+		// ✅ Utiliser CoursDetailScreen
+		// Pas besoin de passer par ModuleDetailScreen
+		builder: (context) => CoursDetailScreen(
+		  idCours: idCours,
+		  titreCours: titre,
+		  descriptionCours: description,
+		),
+	  ),
+	);
+  }
+}
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  STRUCTURE DE L'AFFICHAGE LORS DE L'OUVERTURE                 ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+/*
+ * ÉCRAN AFFICHÉ:
+ *
+ * ┌─────────────────────────────────┐
+ * │ ← Détails du cours              │
+ * ├─────────────────────────────────┤
+ * │                                 │
+ * │ 📚 Titre du Cours               │
+ * │ Description du cours qui explique...  │
+ * │                                 │
+ * ├─────────────────────────────────┤
+ * │ Modules: 3        Contenus: 5   │
+ * ├─────────────────────────────────┤
+ * │ MODULES                   + Ajouter
+ * ├─────────────────────────────────┤
+ * │ ▼ Module 1 - Introduction  [Pub]│  ← CLIQUABLE pour étendre
+ * │   📋 Description courte...       │
+ * │                                 │
+ * │   Contenus du module:           │
+ * │   ┌────────────────────────┐    │
+ * │   │ ▶ Vidéo 01 Intro       │ ⋮  │
+ * │   │ Lien vidéo             │    │
+ * │   └────────────────────────┘    │
+ * │                                 │
+ * │   ┌────────────────────────┐    │
+ * │   │ 📄 Slides PDF          │ ⋮  │
+ * │   │ Document PDF/Office    │    │
+ * │   └────────────────────────┘    │
+ * │                                 │
+ * │   ┌────────────────────────┐    │
+ * │   │ 📝 Notes de cours      │ ⋮  │
+ * │   │ Lorem ipsum dolor sit  │    │
+ * │   └────────────────────────┘    │
+ * │                                 │
+ * ├─────────────────────────────────┤
+ * │ ▶ Module 2 - Concepts    [Brou.]│  ← CLIQUABLE pour étendre
+ * │   📋 Description courte...       │
+ * ├─────────────────────────────────┤
+ * │ ▶ Module 3 - Avancé      [Pub]  │  ← CLIQUABLE pour étendre
+ * │   📋 Description courte...       │
+ * │                                 │
+ * └─────────────────────────────────┘
+ *
+ */
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  INTERACTIONS DISPONIBLES                                      ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+/*
+ * 1️⃣  EXPANSION D'UN MODULE
+ *     ┌─ Tap sur "Module X"
+ *     └─ Animation: ▶ devient ▼
+ *        └─ Affichage des contenus (chargement async)
+ *
+ * 2️⃣  LECTURE DE VIDÉO
+ *     ┌─ Tap sur le bouton ▶ dans une card vidéo
+ *     └─ TODO: Ouvre le lecteur vidéo
+ *
+ * 3️⃣  LECTURE DE TEXTE
+ *     ┌─ Tap sur le bouton 👁️ dans une card texte
+ *     └─ Ouvre un DialogBox avec le texte complet
+ *
+ * 4️⃣  MENU CONTEXTUEL
+ *     ┌─ Tap sur ⋮ dans une card de contenu
+ *     └─ PopupMenu avec options:
+ *        ├─ Modifier (TODO)
+ *        └─ Supprimer (TODO)
+ *
+ * 5️⃣  AJOUTER UN MODULE
+ *     ┌─ Tap sur "+ Ajouter" ou FAB
+ *     └─ Ouvre BottomSheet pour créer un module
+ */
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  COMPARAISON AVANT/APRÈS                                      ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+/*
+ * ❌ ANCIENNE APPROCHE (Avant refactorisation):
+ *
+ * Étape 1: Utilisateur ouvre CoursDetailScreen
+ *          ├─ Affiche: Titre + Modules (liste simple)
+ *          └─ Chaque module a un bouton "Voir"
+ *
+ * Étape 2: Utilisateur clique sur un module
+ *          ├─ Navigator.push(ModuleDetailScreen)
+ *          ├─ Nouvelle page affichée
+ *          └─ Affiche: Titre du module + Liste des contenus
+ *
+ * Étape 3: Utilisateur clique "Retour"
+ *          ├─ Navigator.pop()
+ *          └─ Revient à CoursDetailScreen
+ *
+ * Problème: Chaque module = nouvelle page
+ *           Lent pour naviguer entre plusieurs modules
+ *           Pas de vue d'ensemble
+ */
+
+/*
+ * ✅ NOUVELLE APPROCHE (Après refactorisation):
+ *
+ * Étape 1: Utilisateur ouvre CoursDetailScreen
+ *          ├─ Affiche: Titre + Modules (expansion cards)
+ *          └─ Tous les modules en une seule page
+ *
+ * Étape 2: Utilisateur clique sur un module
+ *          ├─ Expansion animée (▶ → ▼)
+ *          ├─ Contenus chargent (async)
+ *          └─ Affiche: Contenus du module dans la même page
+ *
+ * Étape 3: Utilisateur clique sur un autre module
+ *          ├─ Pas de changement de page
+ *          ├─ Collapse du premier module
+ *          ├─ Expansion du deuxième
+ *          └─ Contenus chargent automatiquement
+ *
+ * Avantages: 
+ * - Une seule page pour tout voir
+ * - Navigation fluide sans changement de page
+ * - Vue d'ensemble complète
+ * - Possibilité d'avoir plusieurs modules ouverts
+ */
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  EXEMPLE DE CODE - Migration                                  ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+// ❌ AVANT: Clic sur module navigue vers ModuleDetailScreen
+/*
+void _onModuleTap(String idModule, String titre) {
+  Navigator.push(
+	context,
+	MaterialPageRoute(
+	  builder: (context) => ModuleDetailScreen(
+		idCours: widget.idCours,
+		idModule: idModule,
+		titreModule: titre,
+	  ),
+	),
+  );
+}
+*/
+
+// ✅ APRÈS: Clic sur module étend la card dans la même page
+/*
+void _onModuleTap(String idModule) {
+  setState(() {
+	_expandedModules[idModule] = !(_expandedModules[idModule] ?? false);
+  });
+}
+*/
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  PROVIDERS UTILISÉS                                           ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+/*
+ * 1. modulesProvider(String idCours)
+ *    ├─ Charge la liste des modules
+ *    ├─ Utilisé par: CoursDetailScreen.build()
+ *    └─ Refresh: Automatique après création/modification
+ *
+ * 2. contenusProvider((String idCours, String idModule))
+ *    ├─ Charge la liste des contenus d'un module
+ *    ├─ Utilisé par: _ModuleExpansionCard.build()
+ *    └─ Refresh: À chaque expansion du module
+ *
+ * 3. coursNotifierProvider
+ *    ├─ Mutations: creerModule, ajouterContenu, supprimerContenu
+ *    ├─ Invalide: mesCoursProvider après mutation
+ *    └─ Utilisé par: Formulaires (bottom sheets)
+ */
+
+/*
+ * ╔════════════════════════════════════════════════════════════════╗
+ * ║  POINTS À VÉRIFIER                                            ║
+ * ╚════════════════════════════════════════════════════════════════╝
+ */
+
+/*
+ * ✅ À Tester:
+ * 1. Expansion/Collapse d'un module
+ * 2. Affichage des contenus à l'expansion
+ * 3. Fermeture d'un module avant son expansion complète
+ * 4. Ouverture de plusieurs modules
+ * 5. Actions sur les contenus (Lancer, Voir, Éditer, Supprimer)
+ * 6. Gestion des états de chargement et erreur
+ * 7. Performance avec beaucoup de modules/contenus
+ * 8. Scroll performant
+ */
