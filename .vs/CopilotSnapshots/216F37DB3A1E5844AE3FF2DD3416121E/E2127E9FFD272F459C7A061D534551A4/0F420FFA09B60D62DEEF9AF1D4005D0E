@@ -1,0 +1,344 @@
+﻿import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:LMS/features/enseignant/presentation/providers/enseignant_provider.dart';
+import 'package:LMS/features/enseignant/data/enseignant_remote_datasource.dart';
+import 'package:LMS/features/enseignant/presentation/screens/categories_management_screen.dart';
+
+class ProfilEnseignantScreen extends ConsumerWidget {
+  const ProfilEnseignantScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profilAsync = ref.watch(profilEnseignantProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Profil', style: GoogleFonts.dmSans()),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: profilAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Erreur chargement', style: GoogleFonts.dmSans())),
+        data: (p) {
+          final user = p;
+          final enseignant = user['enseignant'];
+          final photo = user['photoProfilUser'];
+          final nom = user['nomUser'] ?? '';
+          final prenom = user['prenomUser'] ?? '';
+          final email = user['emailUser'] ?? '';
+          final bio = user['bioUser'] ?? '';
+          final tel = user['numeroTelUser'] ?? '';
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 38,
+                      backgroundColor: Colors.grey[200],
+                      backgroundImage: photo != null
+                          ? NetworkImage('http://192.168.1.33:3000$photo') as ImageProvider
+                          : null,
+                      child: photo == null
+                          ? Text(
+                              (nom.isNotEmpty ? nom[0] : '?').toUpperCase(),
+                              style: GoogleFonts.dmSerifDisplay(fontSize: 26, color: Colors.black26),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('$prenom $nom', style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text(email, style: GoogleFonts.dmSans(color: Colors.grey[700])),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              ElevatedButton(
+                                onPressed: () async {
+                                  // Open edit sheet
+                                  await showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (_) => _EditProfileSheet(profil: user),
+                                  );
+                                  ref.invalidate(profilEnseignantProvider);
+                                },
+                                child: Text('Modifier', style: GoogleFonts.dmSans()),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => CategoriesManagementScreen()),
+                                  );
+                                },
+                                child: Text('Catégories', style: GoogleFonts.dmSans()),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                Text('À propos', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text(bio.isNotEmpty ? bio : 'Aucune description', style: GoogleFonts.dmSans(color: Colors.grey[800])),
+
+                const SizedBox(height: 18),
+                Text('Contact', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text(tel.isNotEmpty ? tel : 'Non renseigné', style: GoogleFonts.dmSans()),
+
+                const SizedBox(height: 18),
+                Text('Informations enseignant', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                if (enseignant != null) ...[
+                  Text('Spécialité: ${enseignant['specialiteEnseignant'] ?? '-'}', style: GoogleFonts.dmSans()),
+                  const SizedBox(height: 6),
+                  Text('Titre: ${enseignant['titreProfessionnelEnseignant'] ?? '-'}', style: GoogleFonts.dmSans()),
+
+                  const SizedBox(height: 12),
+                  Text('Réseaux sociaux', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  ...(enseignant['reseauxSociaux'] as List<dynamic>?)?.map((rs) => _SocialRow(item: rs)).toList() ?? [
+                    Text('Aucun réseau social', style: GoogleFonts.dmSans()),
+                  ],
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => const _AddSocialSheet(),
+                      );
+                      ref.invalidate(profilEnseignantProvider);
+                    },
+                    child: Text('Ajouter un réseau social', style: GoogleFonts.dmSans()),
+                  ),
+                ] else ...[
+                  Text('Profil enseignant non complété', style: GoogleFonts.dmSans()),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  final Map<String, dynamic> profil;
+  const _EditProfileSheet({required this.profil});
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late TextEditingController _nomCtrl;
+  late TextEditingController _prenomCtrl;
+  late TextEditingController _bioCtrl;
+  late TextEditingController _telCtrl;
+  late TextEditingController _specialiteCtrl;
+  late TextEditingController _titreCtrl;
+  bool _loading = false;
+  String? _erreur;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.profil;
+    _nomCtrl = TextEditingController(text: p['nomUser'] ?? '');
+    _prenomCtrl = TextEditingController(text: p['prenomUser'] ?? '');
+    _bioCtrl = TextEditingController(text: p['bioUser'] ?? '');
+    _telCtrl = TextEditingController(text: p['numeroTelUser'] ?? '');
+    final enseignant = p['enseignant'];
+    _specialiteCtrl = TextEditingController(text: enseignant?['specialiteEnseignant'] ?? '');
+    _titreCtrl = TextEditingController(text: enseignant?['titreProfessionnelEnseignant'] ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nomCtrl.dispose();
+    _prenomCtrl.dispose();
+    _bioCtrl.dispose();
+    _telCtrl.dispose();
+    _specialiteCtrl.dispose();
+    _titreCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() { _loading = true; _erreur = null; });
+    try {
+      final datasource = ref.read(enseignantDatasourceProvider);
+      await datasource.modifierProfil(
+        nomUser: _nomCtrl.text.trim(),
+        prenomUser: _prenomCtrl.text.trim(),
+        bioUser: _bioCtrl.text.trim(),
+        numeroTelUser: _telCtrl.text.trim(),
+      );
+      // modifier profil enseignant
+      await datasource.modifierProfilEnseignant(
+        specialiteEnseignant: _specialiteCtrl.text.trim().isEmpty ? null : _specialiteCtrl.text.trim(),
+        titreProfessionnelEnseignant: _titreCtrl.text.trim().isEmpty ? null : _titreCtrl.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() => _erreur = 'Erreur lors de la sauvegarde');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Padding(padding: const EdgeInsets.only(top:12,bottom:16), child: Container(width:36,height:4,decoration: BoxDecoration(color: Colors.grey[200],borderRadius: BorderRadius.circular(2)),),),),
+            Text('Modifier le profil', style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            if (_erreur != null) Text(_erreur!, style: GoogleFonts.dmSans(color: Colors.red)),
+            const SizedBox(height: 8),
+            Text('Nom', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _nomCtrl),
+            const SizedBox(height: 8),
+            Text('Prénom', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _prenomCtrl),
+            const SizedBox(height: 8),
+            Text('Bio', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _bioCtrl, maxLines: 3),
+            const SizedBox(height: 8),
+            Text('Téléphone', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _telCtrl),
+            const SizedBox(height: 8),
+            Text('Spécialité', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _specialiteCtrl),
+            const SizedBox(height: 8),
+            Text('Titre professionnel', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _titreCtrl),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const CircularProgressIndicator() : Text('Enregistrer'))
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialRow extends ConsumerWidget {
+  final Map<String, dynamic> item;
+  const _SocialRow({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      title: Text(item['plateformeRS'] ?? ''),
+      subtitle: Text(item['lienRS'] ?? ''),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete, color: Colors.red),
+        onPressed: () async {
+          try {
+            await ref.read(enseignantDatasourceProvider).supprimerReseauSocial(item['idReseauxSociaux']);
+            ref.invalidate(profilEnseignantProvider);
+          } catch (_) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur suppression')));
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _AddSocialSheet extends ConsumerStatefulWidget {
+  const _AddSocialSheet({super.key});
+
+  @override
+  ConsumerState<_AddSocialSheet> createState() => _AddSocialSheetState();
+}
+
+class _AddSocialSheetState extends ConsumerState<_AddSocialSheet> {
+  final _plat = TextEditingController();
+  final _lien = TextEditingController();
+  bool _loading = false;
+  String? _erreur;
+
+  @override
+  void dispose() {
+    _plat.dispose();
+    _lien.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final plat = _plat.text.trim();
+    final lien = _lien.text.trim();
+    if (plat.isEmpty || lien.isEmpty) {
+      setState(() => _erreur = 'Tous les champs sont obligatoires');
+      return;
+    }
+    setState(() { _loading = true; _erreur = null; });
+    try {
+      await ref.read(enseignantDatasourceProvider).ajouterReseauSocial(plateformeRS: plat, lienRS: lien);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      setState(() => _erreur = 'Erreur ajout');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Padding(padding: const EdgeInsets.only(top:12,bottom:16), child: Container(width:36,height:4,decoration: BoxDecoration(color: Colors.grey[200],borderRadius: BorderRadius.circular(2)),),),),
+            Text('Ajouter un réseau social', style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            if (_erreur != null) Text(_erreur!, style: GoogleFonts.dmSans(color: Colors.red)),
+            const SizedBox(height: 8),
+            Text('Plateforme', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _plat),
+            const SizedBox(height: 8),
+            Text('Lien', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+            TextField(controller: _lien),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loading ? null : _submit, child: _loading ? const CircularProgressIndicator() : Text('Ajouter'))
+          ],
+        ),
+      ),
+    );
+  }
+}

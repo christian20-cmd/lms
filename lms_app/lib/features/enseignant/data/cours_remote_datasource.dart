@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'dart:io';
 
@@ -35,6 +36,8 @@ class CoursRemoteDatasource {
     List<String>? tagsExistants,
     List<String>? nouveauxTags,
     String? imagePath,
+    Uint8List? imageBytes,
+    String? imageNom,
   }) async {
     final formData = FormData.fromMap({
       'titreCours': titreCours,
@@ -47,7 +50,12 @@ class CoursRemoteDatasource {
         'tagsExistants': tagsExistants.join(','),
       if (nouveauxTags != null)
         'nouveauxTags': nouveauxTags.join(','),
-      if (imagePath != null)
+      if (imageBytes != null)
+        'imageCouvertureCours': MultipartFile.fromBytes(
+          imageBytes,
+          filename: imageNom ?? 'image.jpg',
+        )
+      else if (imagePath != null)
         'imageCouvertureCours': await MultipartFile.fromFile(imagePath),
     });
     final response = await _dio.post('/cours',
@@ -65,6 +73,8 @@ class CoursRemoteDatasource {
     bool? estGratuitCours,
     double? prixCours,
     String? imagePath,
+    Uint8List? imageBytes,
+    String? imageNom,
   }) async {
     final formData = FormData.fromMap({
       if (titreCours != null) 'titreCours': titreCours,
@@ -74,7 +84,12 @@ class CoursRemoteDatasource {
       if (estGratuitCours != null)
         'estGratuitCours': estGratuitCours.toString(),
       if (prixCours != null) 'prixCours': prixCours.toString(),
-      if (imagePath != null)
+      if (imageBytes != null)
+        'imageCouvertureCours': MultipartFile.fromBytes(
+          imageBytes,
+          filename: imageNom ?? 'image.jpg',
+        )
+      else if (imagePath != null)
         'imageCouvertureCours': await MultipartFile.fromFile(imagePath),
     });
     final response = await _dio.put('/cours/$idCours',
@@ -150,6 +165,9 @@ class CoursRemoteDatasource {
     return response.data;
   }
 
+  /// Ajoute un contenu. Sur mobile/desktop, fournir [fichierPath].
+  /// Sur web, fournir [fichierBytes] + [fichierNom] (le path filesystem
+  /// n'existe pas dans un navigateur).
   Future<void> ajouterContenu({
     required String idCours,
     required String idModule,
@@ -158,6 +176,8 @@ class CoursRemoteDatasource {
     String? lienExterne,
     String? texteContenu,
     String? fichierPath,
+    Uint8List? fichierBytes,
+    String? fichierNom,
     // Callback pour la progression upload (0.0 → 1.0)
     void Function(int sent, int total)? onSendProgress,
   }) async {
@@ -168,24 +188,31 @@ class CoursRemoteDatasource {
       if (lienExterne  != null && lienExterne.isNotEmpty)  'lienExterne':  lienExterne,
       if (texteContenu != null && texteContenu.isNotEmpty) 'texteContenu': texteContenu,
     };
-  
-    // Ajouter le fichier si présent
-    if (fichierPath != null && fichierPath.isNotEmpty) {
+
+    // ── WEB : upload depuis la mémoire (bytes) ──
+    if (fichierBytes != null) {
+      fields['fichier'] = MultipartFile.fromBytes(
+        fichierBytes,
+        filename: fichierNom ?? 'fichier',
+      );
+    }
+    // ── MOBILE/DESKTOP : upload depuis le disque (path) ──
+    else if (fichierPath != null && fichierPath.isNotEmpty) {
       final file     = File(fichierPath);
       final fileName = file.path.split('/').last;
-  
+
       fields['fichier'] = await MultipartFile.fromFile(
         file.path,
         filename: fileName,
         // Dio détecte le Content-Type automatiquement via l'extension
       );
     }
-  
+
     final formData = FormData.fromMap(fields);
-  
+
     // ── URL avec query param typeContenu (requis par uploadDynamique middleware) ──
     final url = '/cours/$idCours/modules/$idModule/contenus?typeContenu=$typeContenu';
-  
+
     await _dio.post(
       url,
       data: formData,
@@ -209,12 +236,19 @@ class CoursRemoteDatasource {
     String? lienExterne,
     String? texteContenu,
     String? fichierPath,
+    Uint8List? fichierBytes,
+    String? fichierNom,
   }) async {
     final formData = FormData.fromMap({
       if (titreContenu != null) 'titreContenu': titreContenu,
       if (lienExterne != null) 'lienExterne': lienExterne,
       if (texteContenu != null) 'texteContenu': texteContenu,
-      if (fichierPath != null)
+      if (fichierBytes != null)
+        'fichier': MultipartFile.fromBytes(
+          fichierBytes,
+          filename: fichierNom ?? 'fichier',
+        )
+      else if (fichierPath != null)
         'fichier': await MultipartFile.fromFile(fichierPath),
     });
     final response = await _dio.put(

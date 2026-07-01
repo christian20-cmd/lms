@@ -1,0 +1,129 @@
+﻿import 'package:dio/dio.dart';
+
+class EnseignantRemoteDatasource {
+  final Dio _dio;
+
+  EnseignantRemoteDatasource(this._dio);
+
+  // Stats dashboard
+  Future<Map<String, dynamic>> getStatsCours(String idCours) async {
+    final response = await _dio.get('/cours/$idCours/stats');
+    return response.data;
+  }
+
+  // Mes cours
+  Future<List<dynamic>> getMesCours() async {
+    final response = await _dio.get('/cours/mes-cours');
+    return response.data;
+  }
+
+  // Catégories
+  Future<List<dynamic>> getCategories() async {
+    final response = await _dio.get('/cours/categories');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> creerCategorie(String nomCategorie) async {
+    final response = await _dio.post('/cours/categories',
+        data: {'nomCategorie': nomCategorie});
+    return response.data;
+  }
+
+  // Cours CRUD
+  Future<Map<String, dynamic>> creerCours({
+    required String titreCours,
+    required String descriptionCours,
+    required String niveauCours,
+    required String idCategorie,
+    required bool estGratuitCours,
+    double? prixCours,
+    List<String>? tagsExistants,
+    List<String>? nouveauxTags,
+  }) async {
+    final response = await _dio.post('/cours', data: {
+      'titreCours': titreCours,
+      'descriptionCours': descriptionCours,
+      'niveauCours': niveauCours,
+      'idCategorie': idCategorie,
+      'estGratuitCours': estGratuitCours,
+      if (prixCours != null) 'prixCours': prixCours,
+      if (tagsExistants != null) 'tagsExistants': tagsExistants,
+      if (nouveauxTags != null) 'nouveauxTags': nouveauxTags,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> toggleStatutCours(String idCours) async {
+    final response = await _dio.patch('/cours/$idCours/toggle-statut');
+    return response.data;
+  }
+
+  Future<void> supprimerCours(String idCours) async {
+    await _dio.delete('/cours/$idCours');
+  }
+
+  // Modules
+  Future<List<dynamic>> getModules(String idCours) async {
+    final response = await _dio.get('/cours/$idCours/modules');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> creerModule({
+    required String idCours,
+    required String titreModule,
+    required String descriptionModule,
+  }) async {
+    final response = await _dio.post('/cours/$idCours/modules', data: {
+      'titreModule': titreModule,
+      'descriptionModule': descriptionModule,
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> toggleStatutModule({
+    required String idCours,
+    required String idModule,
+  }) async {
+    final response =
+        await _dio.patch('/cours/$idCours/modules/$idModule/toggle-statut');
+    return response.data;
+  }
+
+  Future<void> supprimerModule({
+    required String idCours,
+    required String idModule,
+  }) async {
+    await _dio.delete('/cours/$idCours/modules/$idModule');
+  }
+
+  // Contenus
+  Future<List<dynamic>> getContenus({
+    required String idCours,
+    required String idModule,
+  }) async {
+    final response =
+        await _dio.get('/cours/$idCours/modules/$idModule/contenus');
+    return response.data;
+  }
+
+  // Notifications enseignant
+  Future<List<dynamic>> getMesNotifications() async {
+    final response = await _dio.get('/notifications/enseignant');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> compterNonLues() async {
+    final response = await _dio.get('/notifications/enseignant/non-lues');
+    return response.data;
+  }
+
+  Future<void> marquerToutesCommeLues() async {
+    await _dio.patch('/notifications/enseignant/toutes-lues');
+  }
+
+  // Profil enseignant
+  Future<Map<String, dynamic>> getMonProfil() async {
+    final response = await _dio.get('/profil');
+    return response.data;
+  }
+}

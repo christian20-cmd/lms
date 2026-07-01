@@ -166,28 +166,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 position: _slideAnim,
                 child: FadeTransition(
                   opacity: _slideController.view,
-                  child: Column(
-                    children: [
-                      Text(
-                        'BGT',
-                        style: const TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                          letterSpacing: 6,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Learning Management System',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[400],
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                  
                 ),
               ),
 

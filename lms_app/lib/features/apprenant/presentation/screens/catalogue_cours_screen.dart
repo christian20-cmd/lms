@@ -18,7 +18,7 @@ class _AppColors {
   static const statPurpleText = Color(0xFF4A3FB5);
 }
 
-const String _kBaseUrl = 'http://localhost:3000';
+const String _kBaseUrl = 'http://192.168.43.137:3000';
 
 class CatalogueCoursScreen extends ConsumerStatefulWidget {
   const CatalogueCoursScreen({super.key});
@@ -70,15 +70,15 @@ class _CatalogueCoursScreenState extends ConsumerState<CatalogueCoursScreen> {
                 onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'Rechercher un cours...',
-                  hintStyle: GoogleFonts.outfit(color: _AppColors.textTertiary),
+                  hintStyle: GoogleFonts.outfit(color: const Color.fromARGB(255, 168, 162, 162)),
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
-                  fillColor: _AppColors.card,
+                  fillColor: const Color.fromARGB(255, 255, 255, 255),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: _AppColors.border),
+                    borderRadius: BorderRadius.circular(999),
+                    borderSide: const BorderSide(color: Color.fromARGB(255, 185, 185, 182)),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 ),
               ),
             ),
@@ -191,7 +191,7 @@ class _CatalogueCoursScreenState extends ConsumerState<CatalogueCoursScreen> {
                       children: List.generate(4, (i) => Container(
                         height: 100,
                         margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.circular(999)),
                       )),
                     ),
                   ),
@@ -223,12 +223,12 @@ class _NiveauChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? _AppColors.statPurple : _AppColors.card,
-          border: Border.all(color: selected ? _AppColors.statPurpleText : _AppColors.border),
-          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? const Color.fromARGB(255, 107, 104, 104) : _AppColors.border),
+          borderRadius: BorderRadius.circular(999),
         ),
         child: Center(
           child: Text(label, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w500,
-              color: selected ? _AppColors.statPurpleText : _AppColors.textSecondary)),
+              color: selected ? const Color.fromARGB(255, 0, 0, 0) : _AppColors.textSecondary)),
         ),
       ),
     );
@@ -255,13 +255,13 @@ class _CatalogueCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _AppColors.card,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(999),
           border: Border.all(color: _AppColors.border),
         ),
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(999),
               child: SizedBox(
                 width: 72, height: 72,
                 child: imageUrl != null
@@ -269,13 +269,13 @@ class _CatalogueCard extends StatelessWidget {
                         imageUrl: '$_kBaseUrl$imageUrl',
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => Container(
-                          color: _AppColors.statBlueAccent.withOpacity(0.1),
-                          child: Icon(Icons.school_outlined, color: _AppColors.statBlueAccent),
+                          color: const Color.fromARGB(255, 124, 126, 128).withOpacity(0.1),
+                          child: Icon(Icons.school_outlined, color: const Color.fromARGB(255, 0, 0, 0)),
                         ),
                       )
                     : Container(
-                        color: _AppColors.statBlueAccent.withOpacity(0.1),
-                        child: Icon(Icons.school_outlined, color: _AppColors.statBlueAccent),
+                        color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.1),
+                        child: Icon(Icons.school_outlined, color: const Color.fromARGB(255, 0, 0, 0)),
                       ),
               ),
             ),
@@ -304,7 +304,7 @@ class _CatalogueCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: estGratuit ? _AppColors.statPurple : _AppColors.bg,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           estGratuit ? 'Gratuit' : '${prix ?? 0} Ar',
