@@ -322,38 +322,40 @@ const modifierCours = async (req, res) => {
 // Toggle statut publié/brouillon
 const toggleStatutCours = async (req, res) => {
   try {
-    const { idCours } = req.params
+    const { idCours } = req.params;
+    const cours = await prisma.cours.findUnique({ where: { idCours } });
 
-    const enseignant = await prisma.enseignant.findUnique({
-      where: { idUser: req.user.idUser }
-    })
-
-    if (!enseignant) return res.status(403).json({ message: 'Accès refusé' })
-
-    const cours = await prisma.cours.findUnique({ where: { idCours } })
-
-    if (!cours) return res.status(404).json({ message: 'Cours introuvable' })
-
-    if (cours.idEnseignant !== enseignant.idEnseignant) {
-      return res.status(403).json({ message: 'Vous ne pouvez pas modifier ce cours' })
+    if (!cours) {
+      return res.status(404).json({ message: 'Cours introuvable' });
     }
 
-    const nouveauStatut = cours.statutCours === 'PUBLIE' ? 'BROUILLON' : 'PUBLIE'
+    const nouveauStatut = cours.statutCours === 'PUBLIE' ? 'BROUILLON' : 'PUBLIE';
 
-    const coursModifie = await prisma.cours.update({
-      where: { idCours },
-      data: { statutCours: nouveauStatut }
-    })
+    // Transaction : on met à jour le cours ET ses modules en même temps
+    const [coursModifie] = await prisma.$transaction([
+      prisma.cours.update({
+        where: { idCours },
+        data: { statutCours: nouveauStatut },
+      }),
+      // Si on publie le cours, on publie automatiquement tous ses modules
+      // en brouillon. Si on dépublie le cours, on ne touche pas aux modules
+      // (pour ne pas perdre l'info de ce qui était publié individuellement).
+      ...(nouveauStatut === 'PUBLIE'
+        ? [
+            prisma.module.updateMany({
+              where: { idCours, statutModule: 'BROUILLON' },
+              data: { statutModule: 'PUBLIE' },
+            }),
+          ]
+        : []),
+    ]);
 
-    res.status(200).json({
-      message: `Cours ${nouveauStatut === 'PUBLIE' ? 'publié' : 'dépublié'} avec succès`,
-      statutCours: nouveauStatut
-    })
+    res.json(coursModifie);
   } catch (error) {
-    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+    console.error(error);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour du statut' });
   }
-}
-
+};
 // Supprimer un cours
 const supprimerCours = async (req, res) => {
   try {

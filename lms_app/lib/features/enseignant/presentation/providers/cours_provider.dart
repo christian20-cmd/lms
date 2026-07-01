@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/cours_remote_datasource.dart';
 import 'package:LMS/features/auth/presentation/providers/auth_provider.dart';
@@ -87,6 +88,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
     List<String>? tagsExistants,
     List<String>? nouveauxTags,
     String? imagePath,
+    Uint8List? imageBytes,
+    String? imageNom,
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -100,6 +103,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
         tagsExistants: tagsExistants,
         nouveauxTags: nouveauxTags,
         imagePath: imagePath,
+        imageBytes: imageBytes,
+        imageNom: imageNom,
       );
       _ref.invalidate(mesCoursProvider);
       state = const AsyncValue.data(null);
@@ -118,6 +123,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
     bool? estGratuitCours,
     double? prixCours,
     String? imagePath,
+    Uint8List? imageBytes,
+    String? imageNom,
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -130,6 +137,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
         estGratuitCours: estGratuitCours,
         prixCours: prixCours,
         imagePath: imagePath,
+        imageBytes: imageBytes,
+        imageNom: imageNom,
       );
       _ref.invalidate(mesCoursProvider);
       state = const AsyncValue.data(null);
@@ -239,6 +248,9 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   // ── Contenus ──
+  /// Sur mobile/desktop : passer [fichierPath].
+  /// Sur web : passer [fichierBytes] + [fichierNom] (pas de filesystem
+  /// accessible dans un navigateur, donc pas de path).
   Future<void> ajouterContenu({
     required String idCours,
     required String idModule,
@@ -247,7 +259,9 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
     String? lienExterne,
     String? texteContenu,
     String? fichierPath,
-    void Function(int sent, int total)? onSendProgress, // ← ajouter
+    Uint8List? fichierBytes,
+    String? fichierNom,
+    void Function(int sent, int total)? onSendProgress,
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -259,7 +273,9 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
         lienExterne:    lienExterne,
         texteContenu:   texteContenu,
         fichierPath:    fichierPath,
-        onSendProgress: onSendProgress, // ← transmettre
+        fichierBytes:   fichierBytes,
+        fichierNom:     fichierNom,
+        onSendProgress: onSendProgress,
       );
       _ref.invalidate(contenusProvider((idCours: idCours, idModule: idModule)));
       state = const AsyncValue.data(null);
@@ -277,6 +293,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
     String? lienExterne,
     String? texteContenu,
     String? fichierPath,
+    Uint8List? fichierBytes,
+    String? fichierNom,
   }) async {
     try {
       await _datasource.modifierContenu(
@@ -287,6 +305,8 @@ class CoursNotifier extends StateNotifier<AsyncValue<void>> {
         lienExterne: lienExterne,
         texteContenu: texteContenu,
         fichierPath: fichierPath,
+        fichierBytes: fichierBytes,
+        fichierNom: fichierNom,
       );
       _ref.invalidate(contenusProvider((idCours: idCours, idModule: idModule)));
     } catch (e) {

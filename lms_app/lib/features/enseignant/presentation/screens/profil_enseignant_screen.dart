@@ -23,7 +23,7 @@ class _C {
 }
 
 // Adapte selon ta plateforme de test (localhost web, IP réseau mobile…)
-const String _kBaseUrl = 'http://localhost:3000';
+const String _kBaseUrl = 'http://192.168.43.137:3000';
 
 class ProfilEnseignantScreen extends ConsumerWidget {
   const ProfilEnseignantScreen({super.key});

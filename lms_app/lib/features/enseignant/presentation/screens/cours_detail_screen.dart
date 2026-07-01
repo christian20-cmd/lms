@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,7 +10,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:LMS/features/enseignant/presentation/providers/cours_provider.dart';
 import 'package:LMS/features/enseignant/presentation/widgets/module_management_drawer.dart';
-
+import 'package:LMS/features/enseignant/presentation/screens/video_player_screen.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:LMS/core/network/dio_client.dart';
+import 'package:dio/dio.dart';
 // ══════════════════════════════════════════════════════════════
 //  DESIGN TOKENS
 // ══════════════════════════════════════════════════════════════
@@ -402,6 +407,7 @@ class _CoursDetailScreenState extends ConsumerState<CoursDetailScreen>
               try {
                 await ref.read(coursNotifierProvider.notifier)
                     .toggleStatutCours(widget.idCours);
+                ref.invalidate(modulesProvider(widget.idCours)); // ← ajoute cette ligne
                 if (mounted) {
                   _showSnack(context, estPublie ? 'Cours dépublié' : 'Cours publié avec succès');
                 }
@@ -933,9 +939,9 @@ class _ModuleCardState extends ConsumerState<_ModuleCard>
 }
 
 // ══════════════════════════════════════════════════════════════
-//  CONTENUS SECTION  — grille 4 cases fixes (VIDEO/DOC/TEXTE/IMAGE)
+//  CONTENUS SECTION  — liste verticale 4 lignes fixes (VIDEO/DOC/TEXTE/IMAGE)
 // ══════════════════════════════════════════════════════════════
-class _ContenusSection extends ConsumerWidget {
+class _ContenusSection extends ConsumerStatefulWidget {
   final String idCours;
   final String idModule;
 
@@ -957,7 +963,19 @@ class _ContenusSection extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ContenusSection> createState() => _ContenusSectionState();
+}
+
+class _ContenusSectionState extends ConsumerState<_ContenusSection> {
+  // ── Etat d'upload en cours (affiché en spinner sur la ligne concernée) ──
+  String? _uploadingType;
+  double _uploadProgress = 0;
+
+  String get idCours  => widget.idCours;
+  String get idModule => widget.idModule;
+
+  @override
+  Widget build(BuildContext context) {
     final contenusAsync = ref.watch(contenusProvider((
       idCours:  idCours,
       idModule: idModule,
@@ -1021,31 +1039,33 @@ class _ContenusSection extends ConsumerWidget {
                   ),
                 ),
 
-                // ── Grille carrée 4 cases (2×2) ──
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 1,
-                  children: _kTypeOrder.map((type) {
-                    final contenu = byType[type];
-                    final hasFile = contenu != null && hasFichier(contenu);
+                // ── Liste 4 lignes (VIDEO / DOCUMENT / TEXTE / IMAGE) ──
+                ..._kTypeOrder.map((type) {
+                  final contenu = byType[type];
+                  final hasFile = contenu != null && _ContenusSection.hasFichier(contenu);
+                  final isUploading = _uploadingType == type;
 
-                    return _ContenuGridCell(
-                      type:       type,
-                      contenu:    contenu,
-                      hasFichier: hasFile,
-                      onTap: contenu != null && hasFile
-                          ? () => _openContenu(context, contenu)
-                          : () => _pickAndUpload(context, ref, type),
-                      onLongPress: contenu != null
-                          ? () => _showContenuLongPress(context, ref, contenu)
-                          : () => _pickAndUpload(context, ref, type),
-                    );
-                  }).toList(),
-                ),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _ContenuListItem(
+                      type:        type,
+                      contenu:     contenu,
+                      hasFichier:  hasFile,
+                      isUploading: isUploading,
+                      progress:    _uploadProgress,
+                      onTap: isUploading
+                          ? null
+                          : (contenu != null && hasFile
+                              ? () => _openContenu(context, contenu)
+                              : () => _pickAndUpload(context, ref, type)),
+                      onLongPress: isUploading
+                          ? null
+                          : (contenu != null
+                              ? () => _showContenuLongPress(context, ref, contenu)
+                              : () => _pickAndUpload(context, ref, type)),
+                    ),
+                  );
+                }),
               ],
             ),
           );
@@ -1055,7 +1075,7 @@ class _ContenusSection extends ConsumerWidget {
   }
 
   // ══════════════════════════════════════════════════════════
-  //  OUVRIR CONTENU — tout via lecteur natif Android
+  //  OUVRIR CONTENU — vidéo/image en lecteur intégré, reste via OpenFilex
   // ══════════════════════════════════════════════════════════
   Future<void> _openContenu(
       BuildContext context, Map<String, dynamic> c) async {
@@ -1064,10 +1084,19 @@ class _ContenusSection extends ConsumerWidget {
     final fichierUrl = c['fichierUrl']   as String?;
     final texte      = c['texteContenu'] as String?;
     final titre      = c['titreContenu'] ?? '';
-    // Chemin local mis en cache par file_picker ou uploadé localement
     final localPath  = c['localPath']    as String?;
 
-    // ── TEXTE — dialogue in-app (pas de fichier à ouvrir) ──
+    // ── LOG DEBUG : état complet du contenu à l'ouverture ──
+    debugPrint('╔══ OPEN DEBUG ═════════════════════════════');
+    debugPrint('║ type       : $type');
+    debugPrint('║ kIsWeb     : $kIsWeb');
+    debugPrint('║ lien       : $lien');
+    debugPrint('║ fichierUrl : $fichierUrl');
+    debugPrint('║ localPath  : $localPath');
+    debugPrint('║ baseUrl    : ${DioClient.baseUrl}');
+    debugPrint('╚═══════════════════════════════════════════');
+
+    // ── TEXTE — dialogue in-app ──
     if (type == 'TEXTE') {
       showDialog(
         context: context,
@@ -1095,13 +1124,44 @@ class _ContenusSection extends ConsumerWidget {
       return;
     }
 
-    // ── Chemin local (fichier mis en cache par file_picker) ──
-    // On tente d'abord le chemin local s'il existe
-    if (localPath != null && localPath.isNotEmpty) {
+    // ── VIDEO : toujours le lecteur intégré, jamais une app externe ──
+    if (type == 'VIDEO') {
+      final url = _resolveUrl(lien, fichierUrl);
+      if (url == null) {
+        _showSnack(context, 'Aucune source vidéo disponible');
+        return;
+      }
+
+      if (kIsWeb) {
+        // ── WEB : ouvrir dans un nouvel onglet ──
+        final uri = Uri.tryParse(url);
+        if (uri != null && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (context.mounted) {
+          _showSnack(context, 'Impossible d\'ouvrir la vidéo');
+        }
+      } else {
+        // ── MOBILE : lecteur intégré ──
+        if (context.mounted) {
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: url,
+              titre: titre,
+              isLocal: false,
+            ),
+          ));
+        }
+      }
+      return;
+    }
+
+    // ── Chemin local (fichier en cache, pour DOCUMENT/IMAGE) — MOBILE UNIQUEMENT ──
+    if (!kIsWeb && localPath != null && localPath.isNotEmpty) {
       final file = File(localPath);
       if (await file.exists()) {
+        debugPrint('→ Ouverture via localPath (mobile) : $localPath');
         final result = await OpenFilex.open(localPath);
-        if (result.type != ResultType.done) {
+        if (result.type != ResultType.done && context.mounted) {
           _showSnack(context,
               'Impossible d\'ouvrir avec une app native : ${result.message}');
         }
@@ -1109,39 +1169,121 @@ class _ContenusSection extends ConsumerWidget {
       }
     }
 
-    // ── fichierUrl commençant par '/' = chemin local absolu ──
-    if (fichierUrl != null &&
+    // ── fichierUrl commençant par '/' = chemin local absolu — MOBILE UNIQUEMENT ──
+    // ⚠️ Sur le WEB, un fichierUrl du type "/uploads/documents/x.pdf" est une
+    // URL RELATIVE serveur, pas un chemin filesystem. dart:io File n'est pas
+    // utilisable sur Chrome : ce bloc doit être ignoré sur le web, sinon
+    // l'ouverture de DOCUMENT/IMAGE échoue silencieusement avant d'atteindre
+    // le bloc "Fichier hébergé sur le serveur" plus bas.
+    if (!kIsWeb &&
+        fichierUrl != null &&
         fichierUrl.isNotEmpty &&
         fichierUrl.startsWith('/')) {
       final file = File(fichierUrl);
       if (await file.exists()) {
+        debugPrint('→ Ouverture via fichierUrl en tant que chemin local (mobile) : $fichierUrl');
         final result = await OpenFilex.open(fichierUrl);
-        if (result.type != ResultType.done) {
+        if (result.type != ResultType.done && context.mounted) {
           _showSnack(context,
               'Impossible d\'ouvrir avec une app native : ${result.message}');
         }
         return;
       }
+    } else if (kIsWeb) {
+      debugPrint('→ Web détecté : bloc "chemin local absolu" ignoré (comme prévu)');
     }
 
-    // ── URL distante (lien externe ou fichier sur serveur) ──
-    final url = _resolveUrl(lien, fichierUrl);
-    if (url == null) {
-      _showSnack(context, 'Aucune source disponible');
+    // ── Lien externe véritable (YouTube, Vimeo...) ──
+    if (lien != null && lien.isNotEmpty) {
+      final uri = Uri.tryParse(lien);
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else if (context.mounted) {
+        _showSnack(context, 'Impossible d\'ouvrir le lien');
+      }
       return;
     }
 
-    final uri = Uri.tryParse(url);
-    if (uri != null && await canLaunchUrl(uri)) {
-      // externalApplication = l'OS Android choisit l'app appropriée
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      _showSnack(context, 'Impossible d\'ouvrir le fichier');
+    // ── Fichier hébergé sur le serveur (DOCUMENT/IMAGE) ──
+    if (fichierUrl != null && fichierUrl.isNotEmpty) {
+      final url = _resolveUrl(null, fichierUrl);
+      debugPrint('→ URL résolue pour ouverture serveur : $url');
+      if (url == null) {
+        _showSnack(context, 'Aucune source disponible');
+        return;
+      }
+
+      if (kIsWeb) {
+        // ── WEB : ouvrir dans un nouvel onglet ──
+        final uri = Uri.tryParse(url);
+        final peutOuvrir = uri != null ? await canLaunchUrl(uri) : false;
+        debugPrint('→ Uri.tryParse : $uri');
+        debugPrint('→ canLaunchUrl : $peutOuvrir');
+        if (uri != null && peutOuvrir) {
+          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          debugPrint('→ launchUrl résultat : $ok');
+        } else if (context.mounted) {
+          debugPrint('→ ÉCHEC : impossible de lancer $url');
+          _showSnack(context, 'Impossible d\'ouvrir le fichier');
+        }
+      } else {
+        // ── MOBILE : télécharger en local puis ouvrir ──
+        _showSnack(context, 'Téléchargement…');
+        final path = await _downloadToTemp(url, fichierUrl, titre);
+        if (path == null) {
+          if (context.mounted) _showSnack(context, 'Échec du téléchargement');
+          return;
+        }
+        final result = await OpenFilex.open(path);
+        if (result.type != ResultType.done && context.mounted) {
+          _showSnack(context, 'Impossible d\'ouvrir : ${result.message}');
+        }
+      }
+      return;
+    }
+
+    _showSnack(context, 'Aucune source disponible');
+  }
+
+  /// Télécharge le fichier distant dans le cache local de l'app et retourne
+  /// son chemin, pour pouvoir l'ouvrir avec le lecteur système (OpenFilex)
+  /// au lieu de passer par un navigateur ou une app externe.
+  Future<String?> _downloadToTemp(
+      String url, String fichierUrl, String titre) async {
+        if (kIsWeb) return null;
+    try {
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        client.close();
+        return null;
+      }
+      final bytes = await consolidateHttpClientResponseBytes(response);
+      client.close();
+
+      final originalName = fichierUrl.split('/').last.split('?').first;
+      final ext = originalName.contains('.') ? originalName.split('.').last : '';
+      final safeTitre = (titre.isNotEmpty ? titre : 'fichier')
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = ext.isNotEmpty ? '$safeTitre.$ext' : safeTitre;
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
+      return file.path;
+    } catch (_) {
+      return null;
     }
   }
 
   // ══════════════════════════════════════════════════════════
   //  PICK & UPLOAD — sélectionner puis uploader vers le backend
+  //  Sur web (Chrome), le picker ne fournit pas de `path` filesystem :
+  //  on utilise `withData: true` pour récupérer les bytes en mémoire
+  //  et on les envoie tels quels au notifier / datasource.
+  //  Pendant l'upload, `_uploadingType` fait afficher un spinner + %
+  //  directement sur la ligne concernée dans la liste.
   // ══════════════════════════════════════════════════════════
   Future<void> _pickAndUpload(
       BuildContext context, WidgetRef ref, String type) async {
@@ -1174,7 +1316,7 @@ class _ContenusSection extends ConsumerWidget {
         type: fileType,
         allowedExtensions: allowedExtensions,
         allowMultiple: false,
-        withData: false,
+        withData: kIsWeb, // ← nécessaire sur Chrome, sinon path == null
         withReadStream: false,
       );
 
@@ -1182,8 +1324,14 @@ class _ContenusSection extends ConsumerWidget {
 
       final file = result.files.first;
 
-      if (file.path == null || file.path!.isEmpty) {
-        _showSnack(context, 'Erreur : impossible d\'accéder au fichier');
+      final bool hasSource = kIsWeb
+          ? file.bytes != null
+          : (file.path != null && file.path!.isNotEmpty);
+
+      if (!hasSource) {
+        if (context.mounted) {
+          _showSnack(context, 'Erreur : impossible d\'accéder au fichier');
+        }
         return;
       }
 
@@ -1191,25 +1339,69 @@ class _ContenusSection extends ConsumerWidget {
       final titre = await _askTitre(context, defaultValue: file.name);
       if (titre == null || titre.trim().isEmpty) return; // annulé
 
-      // ── Upload réel vers le backend ──
+      // ── LOG DEBUG : infos sur le fichier avant envoi ──
+      debugPrint('╔══ UPLOAD DEBUG ══════════════════════════');
+      debugPrint('║ type          : $type');
+      debugPrint('║ titre         : ${titre.trim()}');
+      debugPrint('║ file.name     : ${file.name}');
+      debugPrint('║ file.extension: ${file.extension}');
+      debugPrint('║ file.size     : ${file.size} octets');
+      debugPrint('║ kIsWeb        : $kIsWeb');
+      debugPrint('║ file.path     : ${kIsWeb ? "(null sur web)" : file.path}');
+      debugPrint('║ bytes != null : ${file.bytes != null}');
+      debugPrint('║ bytes.length  : ${file.bytes?.length}');
+      debugPrint('║ baseUrl utilisé : ${DioClient.baseUrl}');
+      debugPrint('╚═══════════════════════════════════════════');
+
+      // ── Upload réel vers le backend (path sur mobile, bytes sur web) ──
+      if (mounted) setState(() { _uploadingType = type; _uploadProgress = 0; });
       try {
         await ref.read(coursNotifierProvider.notifier).ajouterContenu(
           idCours: idCours,
           idModule: idModule,
           titreContenu: titre.trim(),
           typeContenu: type,
-          fichierPath: file.path!,
+          fichierPath: kIsWeb ? null : file.path,
+          fichierBytes: kIsWeb ? file.bytes : null,
+          fichierNom: file.name,
+          onSendProgress: (sent, total) {
+            if (mounted && total > 0) {
+              setState(() => _uploadProgress = sent / total);
+            }
+          },
         );
+        debugPrint('✅ UPLOAD RÉUSSI pour type=$type');
         if (context.mounted) {
           _showSnack(context, '${_kTypeLabel[type]} ajouté avec succès');
         }
       } catch (e) {
+        // ── LOG DEBUG : détail complet de l'erreur ──
+        debugPrint('╔══ UPLOAD ERROR DEBUG ════════════════════');
+        debugPrint('║ type erreur   : ${e.runtimeType}');
+        if (e is DioException) {
+          debugPrint('║ statusCode    : ${e.response?.statusCode}');
+          debugPrint('║ response.data : ${e.response?.data}');
+          debugPrint('║ request URI   : ${e.requestOptions.uri}');
+          debugPrint('║ request method: ${e.requestOptions.method}');
+          debugPrint('║ request headers: ${e.requestOptions.headers}');
+          debugPrint('║ request contentType (options): ${e.requestOptions.contentType}');
+          debugPrint('║ request data type: ${e.requestOptions.data.runtimeType}');
+          debugPrint('║ DioException type: ${e.type}');
+          debugPrint('║ message       : ${e.message}');
+        } else {
+          debugPrint('║ toString()    : $e');
+        }
+        debugPrint('╚═══════════════════════════════════════════');
         if (context.mounted) {
           _showSnack(context, 'Erreur upload : ${e.toString().replaceAll('Exception: ', '')}');
         }
+      } finally {
+        if (mounted) setState(() { _uploadingType = null; _uploadProgress = 0; });
       }
     } catch (e) {
-      _showSnack(context, 'Erreur lors de la sélection : $e');
+      if (context.mounted) {
+        _showSnack(context, 'Erreur lors de la sélection : $e');
+      }
     }
   }
 
@@ -1338,8 +1530,9 @@ class _ContenusSection extends ConsumerWidget {
   String? _resolveUrl(String? lien, String? fichierUrl) {
     if (lien != null && lien.isNotEmpty) return lien;
     if (fichierUrl != null && fichierUrl.isNotEmpty) {
-      const base = 'http://localhost:3000';
-      return fichierUrl.startsWith('http') ? fichierUrl : '$base$fichierUrl';
+      return fichierUrl.startsWith('http')
+          ? fichierUrl
+          : '${DioClient.baseUrl}$fichierUrl';
     }
     return null;
   }
@@ -1357,25 +1550,38 @@ class _ContenusSection extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  CONTENU GRID CELL  — case carrée dans la grille 2×2
+//  CONTENU LIST ITEM  — ligne façon liste de transactions
+//  (icône ronde colorée + titre/sous-titre + statut ou spinner d'upload)
 // ══════════════════════════════════════════════════════════════
-class _ContenuGridCell extends StatelessWidget {
+class _ContenuListItem extends StatelessWidget {
   final String type;
   final Map<String, dynamic>? contenu;
   final bool hasFichier;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final bool isUploading;
+  final double progress;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
-  const _ContenuGridCell({
+  const _ContenuListItem({
     required this.type,
     required this.contenu,
     required this.hasFichier,
+    required this.isUploading,
+    required this.progress,
     required this.onTap,
     required this.onLongPress,
   });
 
+  String _subtitle() {
+    if (isUploading) return 'Envoi en cours…';
+    if (contenu == null) return 'Appuyer pour ajouter';
+    final titre = contenu?['titreContenu'] as String?;
+    if (titre != null && titre.isNotEmpty) return titre;
+    return 'Sans titre';
+  }
+
+  /// Icône d'action selon le type (bouton explicite pour ouvrir/lire le contenu)
   IconData _actionIcon() {
-    if (!hasFichier) return Icons.add_rounded;
     switch (type) {
       case 'VIDEO':    return Icons.play_arrow_rounded;
       case 'DOCUMENT': return Icons.open_in_new_rounded;
@@ -1387,9 +1593,8 @@ class _ContenuGridCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta  = _C.contentMeta(type);
-    final label = _kTypeLabel[type] ?? type;
-    final titre = contenu?['titreContenu'] as String?;
+    final meta    = _C.contentMeta(type);
+    final label   = _kTypeLabel[type] ?? type;
     final isEmpty = contenu == null;
 
     return GestureDetector(
@@ -1397,112 +1602,151 @@ class _ContenuGridCell extends StatelessWidget {
       onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isEmpty
-              ? meta.soft.withOpacity(0.4)
-              : meta.soft,
+          color: _C.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isEmpty
-                ? meta.color.withOpacity(0.15)
-                : meta.color.withOpacity(0.25),
-            width: 1.5,
+            color: isUploading
+                ? meta.color.withOpacity(0.4)
+                : _C.border,
+            width: isUploading ? 1.4 : 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
+        child: Row(
           children: [
-            // ── Contenu principal ──
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // ── Icône ronde avec badge (façon avatar transaction) ──
+            SizedBox(
+              width: 42, height: 42,
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  // Icône type
                   Container(
-                    width: 36, height: 36,
+                    width: 42, height: 42,
                     decoration: BoxDecoration(
-                      color: isEmpty
-                          ? Colors.white.withOpacity(0.5)
-                          : Colors.white.withOpacity(0.75),
-                      borderRadius: BorderRadius.circular(10),
+                      shape: BoxShape.circle,
+                      color: isEmpty ? _C.faint : meta.soft,
                     ),
-                    child: Icon(meta.icon,
-                        size: 18,
-                        color: isEmpty
-                            ? meta.color.withOpacity(0.5)
-                            : meta.color),
+                    child: isUploading
+                        ? Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              value: progress > 0 ? progress : null,
+                              valueColor: AlwaysStoppedAnimation<Color>(meta.color),
+                              backgroundColor: meta.color.withOpacity(0.15),
+                            ),
+                          )
+                        : Icon(
+                            meta.icon,
+                            size: 19,
+                            color: isEmpty ? _C.muted : meta.color,
+                          ),
                   ),
-                  const Spacer(),
-                  // Label type
-                  Text(
-                    label,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: isEmpty
-                          ? meta.color.withOpacity(0.5)
-                          : meta.color,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  // Titre contenu si présent
-                  if (titre != null && titre.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      titre,
-                      style: GoogleFonts.poppins(
-                        fontSize: 8,
-                        color: meta.color.withOpacity(0.7),
+                  // Badge bas-droite : ✓ si présent, + si vide
+                  if (!isUploading)
+                    Positioned(
+                      right: -2, bottom: -2,
+                      child: Container(
+                        width: 17, height: 17,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: hasFichier ? _C.green : _C.ink,
+                          border: Border.all(color: _C.surface, width: 2),
+                        ),
+                        child: Icon(
+                          hasFichier ? Icons.check_rounded : Icons.add_rounded,
+                          size: 10,
+                          color: Colors.white,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
                 ],
               ),
             ),
+            const SizedBox(width: 12),
 
-            // ── Bouton action (coin bas droit) ──
-            Positioned(
-              right: 8, bottom: 8,
-              child: Container(
-                width: 26, height: 26,
-                decoration: BoxDecoration(
-                  color: hasFichier
-                      ? meta.color
-                      : meta.color.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                  border: hasFichier
-                      ? null
-                      : Border.all(
-                          color: meta.color.withOpacity(0.4),
-                          width: 1.5,
-                        ),
-                ),
-                child: Icon(
-                  _actionIcon(),
-                  size: 14,
-                  color: hasFichier
-                      ? Colors.white
-                      : meta.color.withOpacity(0.7),
-                ),
+            // ── Titre + sous-titre ──
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 13, fontWeight: FontWeight.w700, color: _C.ink,
+                      )),
+                  const SizedBox(height: 2),
+                  Text(_subtitle(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: isUploading ? meta.color : _C.muted,
+                        fontWeight: isUploading ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
               ),
             ),
+            const SizedBox(width: 8),
 
-            // ── Indicateur long press (coin haut droit) si contenu existant ──
-            if (!isEmpty)
-              Positioned(
-                top: 6, right: 6,
-                child: Container(
-                  width: 16, height: 16,
-                  decoration: BoxDecoration(
-                    color: meta.color.withOpacity(0.15),
-                    shape: BoxShape.circle,
+            // ── Trailing : % pendant upload, sinon statut / chevron ──
+            if (isUploading)
+              Text('${(progress * 100).clamp(0, 100).toInt()}%',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: meta.color,
+                  ))
+            else if (hasFichier)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _C.greenSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('Ajouté',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 9, fontWeight: FontWeight.w700, color: _C.green,
+                        )),
                   ),
-                  child: Icon(Icons.more_horiz, size: 9, color: meta.color),
-                ),
-              ),
+                  const SizedBox(width: 6),
+                  // ── Bouton rond — lire / ouvrir le contenu ──
+                  if (onTap != null)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onTap,
+                      child: Container(
+                        width: 28, height: 28,
+                        decoration: BoxDecoration(
+                          color: meta.soft,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_actionIcon(), size: 15, color: meta.color),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  // ── Bouton "3 points" — ouvre le menu d'options ──
+                  if (onLongPress != null)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onLongPress,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.more_vert_rounded, size: 17, color: _C.muted),
+                      ),
+                    ),
+                ],
+              )
+            else
+              Icon(Icons.add_circle_outline_rounded, size: 18, color: _C.muted),
           ],
         ),
       ),

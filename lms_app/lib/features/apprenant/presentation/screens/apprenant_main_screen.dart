@@ -39,6 +39,8 @@ class _ApprenantMainScreenState extends ConsumerState<ApprenantMainScreen> {
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF5B5BD6),   // ← ajoute
+        unselectedItemColor: const Color(0xFF9090A0), // ← ajoute
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),
@@ -81,7 +83,7 @@ class _ApprenantMainScreenState extends ConsumerState<ApprenantMainScreen> {
                     final photo = profil['photoProfilUser'] as String?;
                     final nom = profil['nomUser'] as String? ?? 'A';
                     return CircleAvatar(
-                      backgroundColor: Colors.grey[300],
+                      backgroundColor: const Color.fromARGB(255, 146, 140, 140),
                       backgroundImage: photo != null
                           ? NetworkImage('$_kBaseUrl$photo') as ImageProvider
                           : null,
@@ -94,7 +96,7 @@ class _ApprenantMainScreenState extends ConsumerState<ApprenantMainScreen> {
                     );
                   },
                   orElse: () => CircleAvatar(
-                    backgroundColor: Colors.grey[300],
+                    backgroundColor: const Color.fromARGB(255, 216, 215, 215),
                     child: Text(
                       (authState.user?.nomUser ?? 'A').isNotEmpty
                           ? (authState.user?.nomUser ?? 'A')[0].toUpperCase()
@@ -103,7 +105,7 @@ class _ApprenantMainScreenState extends ConsumerState<ApprenantMainScreen> {
                     ),
                   ),
                 ),
-                decoration: const BoxDecoration(color: Color(0xFF3B8DDD)),
+                decoration: const BoxDecoration(color: Color.fromARGB(255, 0, 0, 0)),
               ),
               _DrawerItem(
                 icon: Icons.dashboard,
@@ -203,15 +205,15 @@ class _DrawerItem extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF3B8DDD).withOpacity(0.1) : Colors.transparent,
+        color: isActive ? const Color(0xFF5B5BD6).withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
       ),
       child: ListTile(
-        leading: Icon(icon, color: isActive ? const Color(0xFF3B8DDD) : null),
+        leading: Icon(icon, color: isActive ? const Color.fromARGB(255, 0, 0, 0) : null),
         title: Text(
           label,
           style: GoogleFonts.outfit(
-            color: isActive ? const Color(0xFF3B8DDD) : null,
+            color: isActive ? const Color.fromARGB(255, 0, 0, 0) : null,
             fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
           ),
         ),

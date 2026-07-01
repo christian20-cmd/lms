@@ -14,11 +14,12 @@ const uploadDynamique = (req, res, next) => {
     uploadDocument.single('fichier')(req, res, next)
   } else if (type === 'IMAGE') {
     uploadImage.single('fichier')(req, res, next)
+  } else if (type === 'TEXTE') {
+    uploadDocument.single('fichier')(req, res, next)
   } else {
     next()
   }
 }
-
 router.get('/', proteger, getContenus)
 router.post('/', proteger, autoriser('ENSEIGNANT'), uploadDynamique, ajouterContenu)
 router.put('/:idContenu', proteger, autoriser('ENSEIGNANT'), uploadDynamique, modifierContenu)

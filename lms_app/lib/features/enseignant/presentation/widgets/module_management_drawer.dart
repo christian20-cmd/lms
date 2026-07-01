@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
@@ -43,10 +45,22 @@ const _typesMeta = {
 };
 
 // ── Représentation d'un fichier ajouté ─────────────────────────
+// Sur mobile/desktop : `path` est renseigné (accès filesystem natif).
+// Sur web : `bytes` est renseigné (pas de filesystem accessible dans
+// un navigateur), `path` reste null.
 class _UploadItem {
-  final String path;
-  final String type; // VIDEO / DOCUMENT / IMAGE
-  _UploadItem({required this.path, required this.type});
+  final String? path;
+  final Uint8List? bytes;
+  final String fileName;
+  final String type;
+  _UploadItem({
+    this.path,
+    this.bytes,
+    required this.fileName,
+    required this.type,
+  });
+
+  bool get isWeb => bytes != null;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -96,7 +110,7 @@ class _ModuleManagementDrawerState
   late final AnimationController _progressAnim;
   late Animation<double> _progressVal;
 
-  // ── Lecteur vidéo preview ──
+  // ── Lecteur vidéo preview (uniquement disponible hors web) ──
   VideoPlayerController? _videoCtrl;
   bool _videoInitialized = false;
 
@@ -130,6 +144,9 @@ class _ModuleManagementDrawerState
   }
 
   // ── Ajouter fichiers pour un type ──
+  // Sur web, `withData: true` est indispensable : il n'y a pas de
+  // filesystem accessible dans le navigateur, donc `PlatformFile.path`
+  // est toujours null. On récupère alors les bytes en mémoire.
   Future<void> _pickFilesForType(String type, List<String> exts, bool multi) async {
     if (type == 'TEXTE') {
       setState(() => _showTexteField = true);
@@ -140,29 +157,35 @@ class _ModuleManagementDrawerState
         type: FileType.custom,
         allowedExtensions: exts,
         allowMultiple: multi,
-        withData: false,
+        withData: kIsWeb,
         withReadStream: false,
       );
-      if (result != null && result.paths.isNotEmpty) {
-        final paths = result.paths
-            .whereType<String>()
-            .where((p) => p.isNotEmpty)
-            .toList();
+      if (result == null || result.files.isEmpty) return;
 
-        if (paths.isEmpty) {
-          setState(() => _erreur = 'Aucun fichier valide sélectionné');
-          return;
-        }
+      final valid = result.files.where((f) =>
+          kIsWeb ? f.bytes != null : (f.path != null && f.path!.isNotEmpty));
 
-        setState(() {
-          for (final p in paths) {
-            _uploadItems.add(_UploadItem(path: p, type: type));
-          }
-          _erreur = null;
-        });
-        if (type == 'VIDEO' && paths.isNotEmpty) {
-          _initVideoPreview(paths.first);
+      if (valid.isEmpty) {
+        setState(() => _erreur = 'Aucun fichier valide sélectionné');
+        return;
+      }
+
+      setState(() {
+        for (final f in valid) {
+          _uploadItems.add(_UploadItem(
+            path: kIsWeb ? null : f.path,
+            bytes: kIsWeb ? f.bytes : null,
+            fileName: f.name,
+            type: type,
+          ));
         }
+        _erreur = null;
+      });
+
+      // Preview vidéo native uniquement possible hors web (VideoPlayerController.file)
+      if (type == 'VIDEO' && !kIsWeb) {
+        final firstPath = valid.first.path;
+        if (firstPath != null) _initVideoPreview(firstPath);
       }
     } catch (e) {
       setState(() => _erreur = 'Erreur sélection: $e');
@@ -268,16 +291,45 @@ class _ModuleManagementDrawerState
     setState(() { _loading = true; _erreur = null; _uploadProgress = 0; });
 
     try {
-      final tasks = <({String type, String? path, String? lien, String? texte})>[];
+      // path/bytes/nom portés ensemble par tâche pour savoir comment uploader
+      final tasks = <({
+        String type,
+        String? path,
+        Uint8List? bytes,
+        String? nom,
+        String? lien,
+        String? texte,
+      })>[];
 
       for (final item in _uploadItems) {
-        tasks.add((type: item.type, path: item.path, lien: null, texte: null));
+        tasks.add((
+          type: item.type,
+          path: item.path,
+          bytes: item.bytes,
+          nom: item.fileName,
+          lien: null,
+          texte: null,
+        ));
       }
       if (hasUrl) {
-        tasks.add((type: 'VIDEO', path: null, lien: _urlCtrl.text.trim(), texte: null));
+        tasks.add((
+          type: 'VIDEO',
+          path: null,
+          bytes: null,
+          nom: null,
+          lien: _urlCtrl.text.trim(),
+          texte: null,
+        ));
       }
       if (hasTexte) {
-        tasks.add((type: 'TEXTE', path: null, lien: null, texte: _texteCtrl.text.trim()));
+        tasks.add((
+          type: 'TEXTE',
+          path: null,
+          bytes: null,
+          nom: null,
+          lien: null,
+          texte: _texteCtrl.text.trim(),
+        ));
       }
 
       for (int i = 0; i < tasks.length; i++) {
@@ -291,6 +343,8 @@ class _ModuleManagementDrawerState
           lienExterne:  task.lien,
           texteContenu: task.texte,
           fichierPath:  task.path,
+          fichierBytes: task.bytes,
+          fichierNom:   task.nom,
           onSendProgress: (sent, total) {
             if (mounted) setState(() {
               _uploadProgress = (i + (sent / total)) / tasks.length;
@@ -812,7 +866,7 @@ class _UnifiedUploadZoneState extends State<_UnifiedUploadZone>
               : const SizedBox.shrink(),
         ),
 
-        // ── Preview vidéo locale ──
+        // ── Preview vidéo locale (indisponible sur web) ──
         if (widget.videoInit && widget.videoCtrl != null) ...[
           _VideoPreview(controller: widget.videoCtrl!),
           const SizedBox(height: 12),
@@ -905,7 +959,7 @@ class _UnifiedUploadZoneState extends State<_UnifiedUploadZone>
           itemBuilder: (_, i) {
             final item = widget.uploadItems[i];
             final meta = _typesMeta[item.type];
-            final name = item.path.split('/').last;
+            final name = item.fileName;
             return Container(
               decoration: BoxDecoration(
                 color: _C.bg,
@@ -929,7 +983,7 @@ class _UnifiedUploadZoneState extends State<_UnifiedUploadZone>
                         style: GoogleFonts.dmSans(
                             fontSize: 10, fontWeight: FontWeight.w600, color: _C.ink),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(_fileSize(item.path),
+                    Text(_fileSize(item),
                         style: GoogleFonts.dmSans(fontSize: 9, color: _C.muted)),
                   ],
                 )),
@@ -945,10 +999,13 @@ class _UnifiedUploadZoneState extends State<_UnifiedUploadZone>
     );
   }
 
-  String _fileSize(String path) {
+  // Sur web, `item.path` est null : on lit la taille depuis les bytes
+  // en mémoire. `File(...).lengthSync()` planterait (dart:io indisponible
+  // côté navigateur pour un chemin qui de toute façon n'existe pas).
+  String _fileSize(_UploadItem item) {
     try {
-      final bytes = File(path).lengthSync();
-      if (bytes < 1024)    return '${bytes}B';
+      final bytes = item.isWeb ? item.bytes!.length : File(item.path!).lengthSync();
+      if (bytes < 1024) return '${bytes}B';
       if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)}KB';
       return '${(bytes / 1048576).toStringAsFixed(1)}MB';
     } catch (_) { return ''; }
